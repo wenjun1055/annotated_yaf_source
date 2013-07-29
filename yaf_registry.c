@@ -53,18 +53,26 @@ ZEND_END_ARG_INFO()
 /** {{{ yaf_registry_t *yaf_registry_instance(yaf_registry_t *this_ptr TSRMLS_DC)
 */
 yaf_registry_t *yaf_registry_instance(yaf_registry_t *this_ptr TSRMLS_DC) {
+
+	/* 读取当前类 Yaf\\Registry 的静态属性 $_instance */	
 	yaf_registry_t *instance = zend_read_static_property(yaf_registry_ce, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_INSTANCE), 1 TSRMLS_CC);
 
+	/* 判断instance的类型是否为类，并且是否是yaf_registry_ce的实例 */
 	if (Z_TYPE_P(instance) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(instance), yaf_registry_ce TSRMLS_CC)) {
 		zval *regs;
 
+		/* 为yaf_registry_ce实例化一个对象$_instance */
 		MAKE_STD_ZVAL(instance);
 		object_init_ex(instance, yaf_registry_ce);
 
+		/* 为类增的属性$_entries赋空数组值 */
 		MAKE_STD_ZVAL(regs);
 		array_init(regs);
 		zend_update_property(yaf_registry_ce, instance, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS), regs TSRMLS_CC);
+
+		/* 更新类yaf_registry_ce的静态属性$_instance */
 		zend_update_static_property(yaf_registry_ce, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_INSTANCE), instance TSRMLS_CC);
+
 		zval_ptr_dtor(&regs);
 		zval_ptr_dtor(&instance);
 	}
@@ -79,8 +87,11 @@ int yaf_registry_is_set(char *name, int len TSRMLS_DC) {
 	yaf_registry_t 	*registry;
 	zval 			*entrys;
 
+	/* 获取当前类的实例 */
 	registry = yaf_registry_instance(NULL TSRMLS_CC);
+	/* 获取当前类的属性$_entries */
 	entrys	 = zend_read_property(yaf_registry_ce, registry, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS), 1 TSRMLS_CC);
+	/* 判断在属性$_entries中是否有name这个键存在 */
 	return zend_hash_exists(Z_ARRVAL_P(entrys), name, len + 1);
 }
 /* }}} */
@@ -108,10 +119,14 @@ PHP_METHOD(yaf_registry, get) {
 		zval **ppzval, *entrys;
 		yaf_registry_t 	*registry;
 
+		/* 获取当前类的实例 */
 		registry = yaf_registry_instance(NULL TSRMLS_CC);
+		/* 获取类属性$_entries */
 		entrys	 = zend_read_property(yaf_registry_ce, registry, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS), 1 TSRMLS_CC);
 
+		/* $_entries存在并且类型是数组 */
 		if (entrys && Z_TYPE_P(entrys) == IS_ARRAY) {
+			/* 在$_entries这个类属性中查找name这个键对应的value，并返回 */
 			if (zend_hash_find(Z_ARRVAL_P(entrys), name, len + 1, (void **) &ppzval) == SUCCESS) {
 				RETURN_ZVAL(*ppzval, 1, 0);
 			}
@@ -129,16 +144,21 @@ PHP_METHOD(yaf_registry, set) {
 	char *name;
 	uint len;
 
+	/* 获取用户传入的key和name */
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz", &name, &len, &value) == FAILURE) {
 		return;
 	} else {
 		yaf_registry_t	*registry;
 		zval			*entrys;
 
+		/* 获取类的实例化 */
 		registry = yaf_registry_instance(NULL TSRMLS_CC);
+		/* 获取类属性$_entries */
 		entrys 	 = zend_read_property(yaf_registry_ce, registry, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS), 1 TSRMLS_CC);
 
+		/* ++refcount__gc */
 		Z_ADDREF_P(value);
+		/* 将心的键值对加入$_entries */
 		if (zend_hash_update(Z_ARRVAL_P(entrys), name, len + 1, &value, sizeof(zval *), NULL) == SUCCESS) {
 			RETURN_TRUE;
 		}
@@ -153,15 +173,19 @@ PHP_METHOD(yaf_registry, set) {
 PHP_METHOD(yaf_registry, del) {
 	char *name;
 	uint len;
+	/* 获取要删除的键值 */
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &name, &len) == FAILURE) {
 		return;
 	} else {
 		yaf_registry_t	*registry;
 		zval *entrys;
 
+		/* 获取类的实例化 */
 		registry = yaf_registry_instance(NULL TSRMLS_CC);
+		/* 获取类属性$_entries */
 		entrys 	 = zend_read_property(yaf_registry_ce, registry, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS), 1 TSRMLS_CC);
 
+		/* 从$_entries数组中删除name对应的键值对 */
 		zend_hash_del(Z_ARRVAL_P(entrys), name, len + 1);
 	}
 
@@ -185,6 +209,7 @@ PHP_METHOD(yaf_registry, has) {
 /** {{{ proto public Yaf_Registry::getInstance(void)
 */
 PHP_METHOD(yaf_registry, getInstance) {
+	/* 获取或者生成当前类的实例并返回 */
 	yaf_registry_t *registry = yaf_registry_instance(NULL TSRMLS_CC);
 	RETURN_ZVAL(registry, 1, 0);
 }
@@ -210,9 +235,11 @@ YAF_STARTUP_FUNCTION(registry) {
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Registry", "Yaf\\Registry", yaf_registry_methods);
 
+	/* 在模块初始化阶段注册当前类为final类型 */
 	yaf_registry_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
 	yaf_registry_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/* 为类定义两个属性$_instance和$_entries，默认值都为null */
 	zend_declare_property_null(yaf_registry_ce, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_INSTANCE), ZEND_ACC_PROTECTED|ZEND_ACC_STATIC TSRMLS_CC);
 	zend_declare_property_null(yaf_registry_ce, ZEND_STRL(YAF_REGISTRY_PROPERTY_NAME_ENTRYS),  ZEND_ACC_PROTECTED TSRMLS_CC);
 
