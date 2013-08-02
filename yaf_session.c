@@ -107,7 +107,7 @@ static yaf_session_t * yaf_session_instance(TSRMLS_D) {
 
     /* 获取instance所保存的对象的值，并将类型强制转换为 zend_object * */
 	obj = zend_objects_get_address(instance TSRMLS_CC);
-    /* 获取属性 */
+    /* 获取属性的信息$_session */
 	property_info = zend_get_property_info(obj->ce, member, 1 TSRMLS_CC);
 
 	Z_ADDREF_P(*sess);
