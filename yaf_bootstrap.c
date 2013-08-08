@@ -43,6 +43,7 @@ YAF_STARTUP_FUNCTION(bootstrap) {
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Bootstrap_Abstract",  "Yaf\\Bootstrap_Abstract", yaf_bootstrap_methods);
 	yaf_bootstrap_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+  /* 将Yaf_Bootstrap_Abstract定义为抽象类 */
 	yaf_bootstrap_ce->ce_flags |= ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
 
 	return SUCCESS;
