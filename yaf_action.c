@@ -43,8 +43,10 @@ zend_class_entry *yaf_action_ce;
 /** {{{ proto public Yaf_Action_Abstract::getController(void)
 */
 PHP_METHOD(yaf_action, getController) {
+  /* 从当前对象中获取$_controller */
 	yaf_controller_t *controller = zend_read_property(yaf_action_ce, getThis(), ZEND_STRL(YAF_ACTION_PROPERTY_NAME_CTRL), 1 TSRMLS_CC);
-	RETURN_ZVAL(controller, 1, 0);
+	/* 返回$_controller */
+  RETURN_ZVAL(controller, 1, 0);
 }
 /* }}} */
 
@@ -62,9 +64,11 @@ zend_function_entry yaf_action_methods[] = {
 YAF_STARTUP_FUNCTION(action) {
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Action_Abstract", "Yaf\\Action_Abstract", yaf_action_methods);
+  /* Yaf_Action_Abstract类继承了Yaf_Controller类 */
 	yaf_action_ce = zend_register_internal_class_ex(&ce, yaf_controller_ce, NULL TSRMLS_CC);
+  /* 将Yaf_Action_Abstract定义为抽象类 */
 	yaf_action_ce->ce_flags |= ZEND_ACC_IMPLICIT_ABSTRACT_CLASS;
-
+  /* 初始化$_controller=null */
 	zend_declare_property_null(yaf_action_ce, ZEND_STRL(YAF_ACTION_PROPERTY_NAME_CTRL),	ZEND_ACC_PROTECTED TSRMLS_CC);
 
 	return SUCCESS;
