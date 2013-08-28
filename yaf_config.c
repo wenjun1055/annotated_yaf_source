@@ -381,9 +381,11 @@ YAF_STARTUP_FUNCTION(config) {
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Config_Abstract", "Yaf\\Config_Abstract", yaf_config_methods);
 	yaf_config_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* abstract class Yaf_Config_Abstract */
 	yaf_config_ce->ce_flags |= ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
-
+	/* protected $_config=null */
 	zend_declare_property_null(yaf_config_ce, ZEND_STRL(YAF_CONFIG_PROPERT_NAME), ZEND_ACC_PROTECTED TSRMLS_CC);
+	/* protected $_readonly=true */
 	zend_declare_property_bool(yaf_config_ce, ZEND_STRL(YAF_CONFIG_PROPERT_NAME_READONLY), 1, ZEND_ACC_PROTECTED TSRMLS_CC);
 
 	YAF_STARTUP(config_ini);

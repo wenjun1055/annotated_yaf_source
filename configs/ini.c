@@ -501,39 +501,63 @@ yaf_config_t * yaf_config_ini_instance(yaf_config_t *this_ptr, zval *filename, z
 	zval *configs = NULL;
 
 	if (filename && Z_TYPE_P(filename) == IS_ARRAY) {
+		/* filename存在，并且值类型为一个数组 */
+
 		if (this_ptr) {
 			instance = this_ptr;
 		} else {
+			/* 初始化一个Yaf_Config_Ini类的对象 */
 			MAKE_STD_ZVAL(instance);
 			object_init_ex(instance, yaf_config_ini_ce);
 		}
-
+		/* 将前面生成或者传递进来的对象赋值给$_config */
 		zend_update_property(yaf_config_ini_ce, instance, ZEND_STRL(YAF_CONFIG_PROPERT_NAME), filename TSRMLS_CC);
-
+		/* 返回对象 */
 		return instance;
 	} else if (filename && Z_TYPE_P(filename) == IS_STRING) {
+		/* filename存在，并且值类型为一个字符串 */
+
 	    struct stat sb;
+	    /*
+		typedef struct _zend_file_handle {
+			zend_stream_type  type;
+			const char        *filename;
+			char              *opened_path;
+			union {
+				int           fd;
+				FILE          *fp;
+				zend_stream   stream;
+			} handle;
+			zend_bool free_filename;
+		} zend_file_handle;
+	    */
 	    zend_file_handle fh = {0};
+	    /*将filename的值赋给ini_file*/
 		char *ini_file = Z_STRVAL_P(filename);
-		
+		/* 初始化configs，并赋值为null */
 		MAKE_STD_ZVAL(configs);
 		ZVAL_NULL(configs);
-
+		/* 获取文件信息，保存在sb所指的结构体stat中 */
 		if (VCWD_STAT(ini_file, &sb) == 0) {
+			/* 判断是否为一般文件 */
 			if (S_ISREG(sb.st_mode)) {
+				/* VCWD_FOPEN => fopen() */
 				if ((fh.handle.fp = VCWD_FOPEN(ini_file, "r"))) {
 					fh.filename = ini_file;
+					/* TODO */
 					fh.type = ZEND_HANDLE_FP;
 					YAF_G(active_ini_file_section) = NULL;
-
+					/* ini文件解析标致 */
 					YAF_G(parsing_flag) = YAF_CONFIG_INI_PARSING_START;
+					/* 设置ini文件解析的section名称 */
 					if (section_name && Z_STRLEN_P(section_name)) {
 						YAF_G(ini_wanted_section) = section_name;
 					} else {
 						YAF_G(ini_wanted_section) = NULL;
 					}
-
+					/* 初始化需要存配置文件信息的数组 */
 	 				array_init(configs);
+	 				/* 根据php版本设置解析ini文件的api */
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION > 2))
 					if (zend_parse_ini_file(&fh, 0, 0 /* ZEND_INI_SCANNER_NORMAL */,
 						   	(zend_ini_parser_cb_t)yaf_config_ini_parser_cb, configs TSRMLS_CC) == FAILURE
@@ -560,32 +584,39 @@ yaf_config_t * yaf_config_ini_instance(yaf_config_t *this_ptr, zval *filename, z
 		}
 
 		if (section_name && Z_STRLEN_P(section_name)) {
+			/* 如果输出了section_name */ 
 			zval **section;
 			zval tmp;
+			/* 从configs这个存储着所有配置文件的数组中找出setction所代表的名称的节，并将这部分数据赋值给section */
 			if (zend_symtable_find(Z_ARRVAL_P(configs),
 						Z_STRVAL_P(section_name), Z_STRLEN_P(section_name) + 1, (void **)&section) == FAILURE) {
 				zval_ptr_dtor(&configs);
 				yaf_trigger_error(E_ERROR TSRMLS_CC, "There is no section '%s' in '%s'", Z_STRVAL_P(section_name), ini_file);
 				return NULL;
 			}
+			/* 将section中的值复制一份到tmp */
 			INIT_PZVAL(&tmp);
 			array_init(&tmp);
 			zend_hash_copy(Z_ARRVAL(tmp), Z_ARRVAL_PP(section), (copy_ctor_func_t) zval_add_ref, NULL, sizeof(zval *));
 			zval_dtor(configs);
-
+			/* 再将复制得到的tmp赋值给configs */
 			*configs = tmp;
 		} 
 
+		/** 
+		 *  此处是单例的实现，如果赋予了对象则在后面直接返回传递进来的对象
+		 *  如果没有传递对象进来的话，则初始化一个yaf_config_ini_ce对象的实例并且在后面返回
+		 */
 		if (this_ptr) {
 			instance = this_ptr;
 		} else {
 			MAKE_STD_ZVAL(instance);
 			object_init_ex(instance, yaf_config_ini_ce);
 		}
-
+		/* 将需要的配置文件的内容赋给类属性$_config */
 		zend_update_property(yaf_config_ini_ce, instance, ZEND_STRL(YAF_CONFIG_PROPERT_NAME), configs TSRMLS_CC);
 		zval_ptr_dtor(&configs);
-
+		/* 返回类本身$this */
 		return instance;
 	} else {
 		yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Invalid parameters provided, must be path of ini file");
@@ -598,16 +629,19 @@ yaf_config_t * yaf_config_ini_instance(yaf_config_t *this_ptr, zval *filename, z
 */
 PHP_METHOD(yaf_config_ini, __construct) {
 	zval *filename, *section = NULL;
-
+	/* 获取配置文件名和配置文件节名 */
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|z", &filename, &section) == FAILURE) {
+		/* 申明一个变量指针变量prop，并将它初始化为一个数组 */
 		zval *prop;
 		MAKE_STD_ZVAL(prop);
 		array_init(prop);
+		
+		/* $_config = array(); */
 		zend_update_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), prop TSRMLS_CC);
 		zval_ptr_dtor(&prop);
 		return;
 	}
-
+	/* 进行一系列解析ini文件和实例化的过程 */
 	(void)yaf_config_ini_instance(getThis(), filename, section TSRMLS_CC);
 }
 /** }}} */
