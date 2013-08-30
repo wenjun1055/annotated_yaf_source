@@ -219,33 +219,34 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 /** {{{ static void yaf_config_ini_parser_cb(zval *key, zval *value, zval *index, int callback_type, zval *arr TSRMLS_DC)
 */
 static void yaf_config_ini_parser_cb(zval *key, zval *value, zval *index, int callback_type, zval *arr TSRMLS_DC) {
-
+	/* 读取yaf的全局变量获取文件解析的进度标识，如果已经结束则直接返回空 */
 	if (YAF_G(parsing_flag) == YAF_CONFIG_INI_PARSING_END) {
 		return;
 	}
-
+	/* 解析标识:Section: [foobar] */
 	if (callback_type == ZEND_INI_PARSER_SECTION) {
 		zval **parent;
 		char *seg, *skey;
 		uint skey_len;
-
+		/* 解析进行中 */
 		if (YAF_G(parsing_flag) == YAF_CONFIG_INI_PARSING_PROCESS) {
+			/* 置为解析结束，返回空值 */
 			YAF_G(parsing_flag) = YAF_CONFIG_INI_PARSING_END;
 			return;
 		}
-
+		/* 将key复制产生一个skey */
 		skey = estrndup(Z_STRVAL_P(key), Z_STRLEN_P(key));
-
+		/* 初始化全局变量active_ini_file_section为一个数组 */
 		MAKE_STD_ZVAL(YAF_G(active_ini_file_section));
 		array_init(YAF_G(active_ini_file_section));
-
+		/* 从skey重查找第一次出现：的地方 */
 		if ((seg = strchr(skey, ':'))) {
 			char *section;
 
 			while (*(seg) == ' ' || *(seg) == ':') {
 				*(seg++) = '\0';
 			}
-
+			/* 在查找在seg中最后出现：的地方 */
 			if ((section = strrchr(seg, ':'))) {
 			    /* muilt-inherit */
 				do {

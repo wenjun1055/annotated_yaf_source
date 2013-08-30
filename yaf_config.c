@@ -55,8 +55,10 @@ static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC);
 */
 static int yaf_config_ini_modified(zval * file, long ctime TSRMLS_DC) {
 	zval  n_ctime;
+	/* 获取文件上一次状态改变的时间 */
 	php_stat(Z_STRVAL_P(file), Z_STRLEN_P(file), 7 /* FS_CTIME */ , &n_ctime TSRMLS_CC);
 	if (Z_TYPE(n_ctime) != IS_BOOL && ctime != Z_LVAL(n_ctime)) {
+		/* 如果文件有改动则返回最近一次状态改变的时间 */
 		return Z_LVAL(n_ctime);
 	}
 	return 0;
@@ -67,8 +69,11 @@ static int yaf_config_ini_modified(zval * file, long ctime TSRMLS_DC) {
  */
 static void yaf_config_cache_dtor(yaf_config_cache **cache) {
 	if (*cache) {
+		/* 销毁hash表 */
 		zend_hash_destroy((*cache)->data);
+		/* 销毁持久变量 */
 		pefree((*cache)->data, 1);
+		/* 销毁cache */
 		pefree(*cache, 1);
 	}
 }
@@ -76,17 +81,20 @@ static void yaf_config_cache_dtor(yaf_config_cache **cache) {
 
 /** {{{ static void yaf_config_zval_dtor(zval **value)
  */
+/* 销毁zval变量，从里面的实现来看，只能销毁string、array、constant */
 static void yaf_config_zval_dtor(zval **value) {
 	if (*value) {
 		switch(Z_TYPE_PP(value)) {
 			case IS_STRING:
 			case IS_CONSTANT:
+				/* if (Z_STRVAL_P(z)[ Z_STRLEN_P(z) ] != '\0') { zend_err..... */
 				CHECK_ZVAL_STRING(*value);
 				pefree((*value)->value.str.val, 1);
 				pefree(*value, 1);
 				break;
 			case IS_ARRAY:
 			case IS_CONSTANT_ARRAY: {
+				/* 销毁hash表，删除持久性内存的变量 */
 				zend_hash_destroy((*value)->value.ht);
 				pefree((*value)->value.ht, 1);
 				pefree(*value, 1);
@@ -104,19 +112,21 @@ static void yaf_config_copy_persistent(HashTable *pdst, HashTable *src TSRMLS_DC
 	char *key;
 	uint keylen;
 	ulong idx;
-
+	/* 遍历src的hash表中的数据 */
 	for(zend_hash_internal_pointer_reset(src);
 			zend_hash_has_more_elements(src) == SUCCESS;
 			zend_hash_move_forward(src)) {
 
 		if (zend_hash_get_current_key_ex(src, &key, &keylen, &idx, 0, NULL) == HASH_KEY_IS_LONG) {
+			/* 当前位置的key为long类型 */
 			zval *tmp;
 			if (zend_hash_get_current_data(src, (void**)&ppzval) == FAILURE) {
 				continue;
 			}
-
+			/* 将现在的临时变量转为持久型的 */
 			tmp = yaf_config_ini_zval_persistent(*ppzval TSRMLS_CC);
 			if (tmp)
+			/* 将tmp以键idx加入到pdst这个hash表中 */
 			zend_hash_index_update(pdst, idx, (void **)&tmp, sizeof(zval *), NULL);
 
 		} else {
@@ -124,9 +134,10 @@ static void yaf_config_copy_persistent(HashTable *pdst, HashTable *src TSRMLS_DC
 			if (zend_hash_get_current_data(src, (void**)&ppzval) == FAILURE) {
 				continue;
 			}
-
+			/* 将现在的临时变量转为持久型的 */
 			tmp = yaf_config_ini_zval_persistent(*ppzval TSRMLS_CC);
 			if (tmp)
+			/* 将值加入到pdst这个hash表中 */
 			zend_hash_update(pdst, key, keylen, (void **)&tmp, sizeof(zval *), NULL);
 		}
 	}
@@ -140,11 +151,11 @@ static void yaf_config_copy_losable(HashTable *ldst, HashTable *src TSRMLS_DC) {
 	char *key;
 	ulong idx;
 	uint keylen;
-
+	/* 遍历hash表src */
 	for(zend_hash_internal_pointer_reset(src);
 			zend_hash_has_more_elements(src) == SUCCESS;
 			zend_hash_move_forward(src)) {
-
+		/* 根据当前key的类型来选择操作方式 */
 		if (zend_hash_get_current_key_ex(src, &key, &keylen, &idx, 0, NULL) == HASH_KEY_IS_LONG) {
 			if (zend_hash_get_current_data(src, (void**)&ppzval) == FAILURE) {
 				continue;
@@ -167,35 +178,50 @@ static void yaf_config_copy_losable(HashTable *ldst, HashTable *src TSRMLS_DC) {
 
 /** {{{ static zval * yaf_config_ini_zval_persistent(zval *zvalue TSRMLS_DC)
  */
+/* 将一个普通变量转换成持久性变量 */
 static zval * yaf_config_ini_zval_persistent(zval *zvalue TSRMLS_DC) {
+	/* 申请一块持久型的空间 */
 	zval *ret = (zval *)pemalloc(sizeof(zval), 1);
+	/* 初始化持久变量ret */
 	INIT_PZVAL(ret);
 	switch (zvalue->type) {
 		case IS_RESOURCE:
 		case IS_OBJECT:
+		/* 如果传入的变量类型为resource或者object的话就直接返回初始化过的ret */
 			break;
 		case IS_BOOL:
 		case IS_LONG:
 		case IS_NULL:
+		/* 如果传入的变量类型为boolean、long或者null的话就直接返回初始化过的ret */
 			break;
 		case IS_CONSTANT:
 		case IS_STRING:
+		/* 传入的变量类型为constant或者string */
+				/* 检验字符串是否标准，最后一个字符是'\0' */
 				CHECK_ZVAL_STRING(zvalue);
+				/* 将ret的类型置为string */
 				Z_TYPE_P(ret) = IS_STRING;
+				/* 用zvalue的值和长度生成一个存储着相同信息的持久性内存并赋值给value */
 				ret->value.str.val = pestrndup(zvalue->value.str.val, zvalue->value.str.len, 1);
 				ret->value.str.len = zvalue->value.str.len;
 			break;
 		case IS_ARRAY:
 		case IS_CONSTANT_ARRAY: {
+		/* 传入的变量类型为array或者CONSTANT_ARRAY的话 */	
+				/* 初始化两个HashTable,并将zvalue的hash的指针赋给original_ht */
 				HashTable *tmp_ht, *original_ht = zvalue->value.ht;
+				/* 初始化一个持久性的HashTable的存储并赋值给tmp_ht */
 				tmp_ht = (HashTable *)pemalloc(sizeof(HashTable), 1);
 				if (!tmp_ht) {
 					return NULL;
 				}
-
+				/* 将tmp_ht初始化为一个和original_ht拥有相同存储单元的数组 */
 				zend_hash_init(tmp_ht, zend_hash_num_elements(original_ht), NULL, (dtor_func_t)yaf_config_zval_dtor, 1);
+				/* 进行赋值和持久性的转换 */
 				yaf_config_copy_persistent(tmp_ht, original_ht TSRMLS_CC);
+				/* ret类型设置为array */
 				Z_TYPE_P(ret) = IS_ARRAY;
+				/* 将tmp_ht这个持久性的hash表的句柄赋值给ret_value.ht */
 				ret->value.ht = tmp_ht;
 			}
 			break;
@@ -208,6 +234,7 @@ static zval * yaf_config_ini_zval_persistent(zval *zvalue TSRMLS_DC) {
 /** {{{ static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC)
  */
 static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC) {
+	/* 初始化变量ret */
 	zval *ret;
 	MAKE_STD_ZVAL(ret);
 	switch (zvalue->type) {
@@ -220,11 +247,14 @@ static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC) {
 			break;
 		case IS_CONSTANT:
 		case IS_STRING:
+			/* 如果zvalue的类型为constant或者string，检验zvalue字符串是否是正常字符串 */
 				CHECK_ZVAL_STRING(zvalue);
+				/* 将zvalue的值复制给ret */
 				ZVAL_STRINGL(ret, zvalue->value.str.val, zvalue->value.str.len, 1);
 			break;
 		case IS_ARRAY:
 		case IS_CONSTANT_ARRAY: {
+			/* 如果zvalue的类型为array或者constant array的话则将ret初始化为一个数组，并且使用yaf_config_copy_losable方法将值复制给ret */
 				HashTable *original_ht = zvalue->value.ht;
 				array_init(ret);
 				yaf_config_copy_losable(Z_ARRVAL_P(ret), original_ht TSRMLS_CC);
