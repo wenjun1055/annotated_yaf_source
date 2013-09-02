@@ -54,6 +54,7 @@ ZEND_END_ARG_INFO()
 /* }}} */
 
 /* {{{ static void yaf_config_ini_zval_deep_copy(zval **p) 
+ * 递归复制产生一个新的数组
  */
 static void yaf_config_ini_zval_deep_copy(zval **p) {
 	zval *value;
@@ -79,6 +80,7 @@ static void yaf_config_ini_zval_deep_copy(zval **p) {
 /* }}} */
 
 /** {{{ zval * yaf_config_ini_format(yaf_config_t *instance, zval **ppzval TSRMLS_DC)
+ *  通过调用yaf_config_ini_instance实例化类，并返回类的对象
 */
 zval * yaf_config_ini_format(yaf_config_t *instance, zval **ppzval TSRMLS_DC) {
 	zval *readonly, *ret;
@@ -88,14 +90,28 @@ zval * yaf_config_ini_format(yaf_config_t *instance, zval **ppzval TSRMLS_DC) {
 }
 /* }}} */
 
+/* PHP版本高于5.2 */
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION > 2))
 /** {{{ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index, int callback_type, zval *arr TSRMLS_DC)
 */
+/*
+ *  INI entries
+ *	define ZEND_INI_PARSER_ENTRY     	1 		Normal entry: foo = bar
+ *	define ZEND_INI_PARSER_SECTION   	2 		Section: [foobar]
+ *	define ZEND_INI_PARSER_POP_ENTRY 	3 		Offset entry: foo[] = bar
+ */
 static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index, int callback_type, zval *arr TSRMLS_DC) {
 	zval *element;
 	switch (callback_type) {
 		case ZEND_INI_PARSER_ENTRY:
 			{
+				/** 
+				 *	这一步是对类似param=1或者param.p.z=2这种类型的配置信息进行分割并以数组的形式保存到arr的过程   
+				 *	主要步骤是首先在126行对于key进行第一次的以.分割第一节，然后利用循环分割处理key，再通过判断当前key时候已经存在于arr
+				 *  的第一维或者多维数组中。
+				 *  如果不存在：并且当前key还能分割的话，则生成一个空数组，并已当前分割得到的key组成键值对保存到arr的相应位置。如果当前key不能继续分割，则以当前分割得到的字符串为key，将传进来的value保存到数组arr中
+				 *  如果存在，并且对应的值不为数组：如果当前的key还能分割，则初始化一个空数组为value，以分割出的字符串为key，存在数组；不能分割的话则，直接以当前分割出的字符串为key，将value保存到arr数组中
+				 */
 				char *skey, *seg, *ptr;
 				zval **ppzval, *dst;
 
@@ -104,19 +120,26 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 				}
 
 				dst = arr;
+				/* 二进制安全，复制一份key到skey */
 				skey = estrndup(Z_STRVAL_P(key), Z_STRLEN_P(key));
+				/* 对skey用.进行一部分一部分的分割，分割方式见php内置函数：strtok */
 				if ((seg = php_strtok_r(skey, ".", &ptr))) {
+					/* 进行循环处理 */
 					do {
 					    char *real_key = seg;
+					    /* 再用.继续分割skey */
 						seg = php_strtok_r(NULL, ".", &ptr);
 						if (zend_symtable_find(Z_ARRVAL_P(dst), real_key, strlen(real_key) + 1, (void **) &ppzval) == FAILURE) {
+							/* 从HashTable dst中用real_key进行查找失败 */
 							if (seg) {
+								/* 本次循环内的skey分割有效的话，则初始化一个数组tmp，并将它以键real_key添加到数组dst中 */
 								zval *tmp;
 							    MAKE_STD_ZVAL(tmp);   
 								array_init(tmp);
 								zend_symtable_update(Z_ARRVAL_P(dst), 
 										real_key, strlen(real_key) + 1, (void **)&tmp, sizeof(zval *), (void **)&ppzval);
 							} else {
+								/* 本次循环内skey分割无效的话，将value的值复制给element，并将它以建real_key添加到数组dst中 */
 							    MAKE_STD_ZVAL(element);
 								ZVAL_ZVAL(element, value, 1, 0);
 								zend_symtable_update(Z_ARRVAL_P(dst), 
@@ -124,14 +147,18 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 								break;
 							}
 						} else {
+							/* 从HashTable dst中用real_key进行查找成功 */
 							if (IS_ARRAY != Z_TYPE_PP(ppzval)) {
+								/* 查找到的值ppzval不是数组 */
 								if (seg) {
+									/* 本次循环内的skey分割有效的话，则初始化一个数组tmp，并将它以键real_key添加到数组dst中 */
 									zval *tmp;
 									MAKE_STD_ZVAL(tmp);   
 									array_init(tmp);
 									zend_symtable_update(Z_ARRVAL_P(dst), 
 											real_key, strlen(real_key) + 1, (void **)&tmp, sizeof(zval *), (void **)&ppzval);
 								} else {
+									/* 本次循环内skey分割无效的话，将value的值复制给element，并将它以建real_key添加到数组dst中 */
 									MAKE_STD_ZVAL(element);
 									ZVAL_ZVAL(element, value, 1, 0);
 									zend_symtable_update(Z_ARRVAL_P(dst), 
@@ -496,7 +523,9 @@ static void yaf_config_ini_parser_cb(zval *key, zval *value, int callback_type, 
 #endif
 
 /** {{{ yaf_config_t * yaf_config_ini_instance(yaf_config_t *this_ptr, zval *filename, zval *section_name TSRMLS_DC)
-*/
+ *  根据传入的filename的类型来进行类的类的初始化的方式，如果传入的是真正的文件名的话，就读取配置文件的信息，
+ *	然后实例化类，并返回对象
+ */
 yaf_config_t * yaf_config_ini_instance(yaf_config_t *this_ptr, zval *filename, zval *section_name TSRMLS_DC) {
 	yaf_config_t *instance;
 	zval *configs = NULL;

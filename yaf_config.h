@@ -24,8 +24,8 @@
 #define YAF_CONFIG_PROPERT_NAME_READONLY "_readonly"
 
 struct _yaf_config_cache {
-	long ctime;
-	HashTable *data;
+	long ctime;        //缓存的时间标识，生成缓存时配置文件最后修改的时间
+	HashTable *data;   //配置文件内容
 };
 
 typedef struct _yaf_config_cache yaf_config_cache;
