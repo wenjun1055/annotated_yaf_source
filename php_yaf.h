@@ -99,7 +99,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	zend_bool 	lowcase_path;
 	zend_bool 	use_spl_autoload;
 	zend_bool 	throw_exception;
-	zend_bool 	cache_config;
+	zend_bool 	cache_config;               //缓存标识
 	zend_bool   action_prefer;
 	zend_bool	name_suffix;
 	zend_bool  	autoload_started;
@@ -111,7 +111,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	zend_bool  	st_compatible;
 /* }}} */
 	long		forward_limit;
-	HashTable	*configs;
+	HashTable	*configs;                //配置缓存
 	zval 		*modules;
 	zval        *default_route;
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION < 4))

@@ -51,8 +51,9 @@ ZEND_END_ARG_INFO()
 static zval * yaf_config_ini_zval_persistent(zval *zvalue TSRMLS_DC);
 static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC);
 
-/** {{{ yaf_config_ini_modified
-*/
+/* {{{ yaf_config_ini_modified
+ *  检查配置文件是否修改，修改的话返回最近修改时间，否则返回0	
+ */
 static int yaf_config_ini_modified(zval * file, long ctime TSRMLS_DC) {
 	zval  n_ctime;
 	/* 获取文件上一次状态改变的时间 */
@@ -66,6 +67,7 @@ static int yaf_config_ini_modified(zval * file, long ctime TSRMLS_DC) {
 /* }}} */
 
 /** {{{ static void yaf_config_cache_dtor(yaf_config_cache **cache)
+ * 销毁配置文件的缓存
  */
 static void yaf_config_cache_dtor(yaf_config_cache **cache) {
 	if (*cache) {
@@ -81,7 +83,7 @@ static void yaf_config_cache_dtor(yaf_config_cache **cache) {
 
 /** {{{ static void yaf_config_zval_dtor(zval **value)
  */
-/* 销毁zval变量，从里面的实现来看，只能销毁string、array、constant */
+/* 销毁持久型zval变量，从里面的实现来看，只能销毁string、array、constant */
 static void yaf_config_zval_dtor(zval **value) {
 	if (*value) {
 		switch(Z_TYPE_PP(value)) {
@@ -106,6 +108,7 @@ static void yaf_config_zval_dtor(zval **value) {
 /* }}} */
 
 /** {{{ static void yaf_config_copy_persistent(HashTable *pdst, HashTable *src TSRMLS_DC)
+ *	将普通的HashTable src变成持久型的HashTable pdst
  */
 static void yaf_config_copy_persistent(HashTable *pdst, HashTable *src TSRMLS_DC) {
 	zval **ppzval;
@@ -145,6 +148,7 @@ static void yaf_config_copy_persistent(HashTable *pdst, HashTable *src TSRMLS_DC
 /* }}} */
 
 /** {{{ static void yaf_config_copy_losable(HashTable *ldst, HashTable *src TSRMLS_DC)
+ * 实现普通的复制，没有做持久性等工作
  */
 static void yaf_config_copy_losable(HashTable *ldst, HashTable *src TSRMLS_DC) {
 	zval **ppzval, *tmp;
@@ -232,6 +236,7 @@ static zval * yaf_config_ini_zval_persistent(zval *zvalue TSRMLS_DC) {
 /* }}} */
 
 /** {{{ static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC)
+ * 	将 IS_CONSTANT IS_STRING IS_ARRAY IS_CONSTANT_ARRAY等类型的变量做普通复制
  */
 static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC) {
 	/* 初始化变量ret */
@@ -267,6 +272,8 @@ static zval * yaf_config_ini_zval_losable(zval *zvalue TSRMLS_DC) {
 /* }}} */
 
 /** {{{ static yaf_config_t * yaf_config_ini_unserialize(yaf_config_t *this_ptr, zval *filename, zval *section TSRMLS_DC)
+ *	主要功能是从yaf的配置缓存中读取配置信息，然后利用时间判断配置ini文件是否有过修改
+ *	没有修改的话则利用缓存中的配置信息实例化一个yaf_config_ini类的实例并返回	
  */
 static yaf_config_t * yaf_config_ini_unserialize(yaf_config_t *this_ptr, zval *filename, zval *section TSRMLS_DC) {
 	char *key;
@@ -276,14 +283,16 @@ static yaf_config_t * yaf_config_ini_unserialize(yaf_config_t *this_ptr, zval *f
 	if (!YAF_G(configs)) {
 		return NULL;
 	}
-
+	/* 格式化字符串并赋值给key，并返回字符串的长度 */
 	len = spprintf(&key, 0, "%s#%s", Z_STRVAL_P(filename), Z_STRVAL_P(section));
 
 	if (zend_hash_find(YAF_G(configs), key, len + 1, (void **)&ppval) == SUCCESS) {
+		/* 检查配置文件是否修改,如果修改的话则释放key，并返回NULL */
 		if (yaf_config_ini_modified(filename, (*ppval)->ctime TSRMLS_CC)) {
 			efree(key);
 			return NULL;
 		} else {
+			/* 没修改的话则初始化一个变量props为数组，并将缓存中的值复制给props */
 			zval *props;
 
 			MAKE_STD_ZVAL(props);
@@ -292,6 +301,10 @@ static yaf_config_t * yaf_config_ini_unserialize(yaf_config_t *this_ptr, zval *f
 			efree(key);
 			/* tricky way */
 			Z_SET_REFCOUNT_P(props, 0);
+			/*
+			 * 利用props和section的值来初始化一个yaf_config_ini的对象，最后返回这个类的实例；
+			 * 这里实现了配置信息的缓存，在多个类的实例中的共享
+			 */
 			return yaf_config_ini_instance(this_ptr, props, section TSRMLS_CC);
 		}
 		efree(key);
@@ -302,6 +315,8 @@ static yaf_config_t * yaf_config_ini_unserialize(yaf_config_t *this_ptr, zval *f
 /* }}} */
 
 /** {{{ static void yaf_config_ini_serialize(yaf_config_t *this_ptr, zval *filename, zval *section TSRMLS_DC)
+ *	如果没有初始化YAF_G(configs)，则初始化它，如果初始化了则将它的HashTable转换为持久常驻内存型
+ *	并以文件名加section为key，将cache信息存入YAF_G(configs)
  */
 static void yaf_config_ini_serialize(yaf_config_t *this_ptr, zval *filename, zval *section TSRMLS_DC) {
 	char *key;
@@ -312,37 +327,43 @@ static void yaf_config_ini_serialize(yaf_config_t *this_ptr, zval *filename, zva
 	yaf_config_cache *cache;
 
 	if (!YAF_G(configs)) {
+		/* 为全局变量configs申请一块HashTable的持久型的内存 */
 		YAF_G(configs) = (HashTable *)pemalloc(sizeof(HashTable), 1);
 		if (!YAF_G(configs)) {
 			return;
 		}
+		/* 初始化configs为一个拥有8个元素的数组 */
+		/* TODO 为啥是8？ */
 		zend_hash_init(YAF_G(configs), 8, NULL, (dtor_func_t) yaf_config_cache_dtor, 1);
 	}
-
+	/* 为变量cache申请一个类型为yaf_config_cache的持久型内存 */
 	cache = (yaf_config_cache *)pemalloc(sizeof(yaf_config_cache), 1);
 
 	if (!cache) {
 		return;
 	}
-
+	/* 为变量persistent申请一块HashTable类型的持久型内存 */
 	persistent = (HashTable *)pemalloc(sizeof(HashTable), 1);
 	if (!persistent) {
 		return;
 	}
-
+	/* 获取对象的属性$_config */
 	configs = zend_read_property(yaf_config_ini_ce, this_ptr, ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
-
+	/* 将persistent初始化为一个和$_configs拥有相同数量成员的数组 */
 	zend_hash_init(persistent, zend_hash_num_elements(Z_ARRVAL_P(configs)), NULL, (dtor_func_t) yaf_config_zval_dtor, 1);
-
+	/* 复制$_configs中的每一个元素，并且转化为持久型的元素添加到persistent */
 	yaf_config_copy_persistent(persistent, Z_ARRVAL_P(configs) TSRMLS_CC);
-
+	/* 获取配置文件最后修改的时间 */
 	ctime = yaf_config_ini_modified(filename, 0 TSRMLS_CC);
+	/* 为当前的缓存添加时间标识 */
 	cache->ctime = ctime;
+	/* 将persistent持久型数组作为cache的值 */
 	cache->data  = persistent;
+	/* key为filename# */
 	len = spprintf(&key, 0, "%s#%s", Z_STRVAL_P(filename), Z_STRVAL_P(section));
-
+	/* 以上面拼装成的key将cache储存到全局configs中 */
 	zend_hash_update(YAF_G(configs), key, len + 1, (void **)&cache, sizeof(yaf_config_cache *), NULL);
-
+	/* 释放key的内存 */
 	efree(key);
 }
 /* }}} */
@@ -357,13 +378,15 @@ yaf_config_t * yaf_config_instance(yaf_config_t *this_ptr, zval *arg1, zval *arg
 	}
 
 	if (Z_TYPE_P(arg1) == IS_STRING) {
+		/* 判断argv1字符串值的最后三位是否为'ini' */
 		if (strncasecmp(Z_STRVAL_P(arg1) + Z_STRLEN_P(arg1) - 3, "ini", 3) == 0) {
 			if (YAF_G(cache_config)) {
+				/* 如果已经有配置文件的缓存的话就实例化一个对象，从这里看出，arg1是filename，arg2为section */
 				if ((instance = yaf_config_ini_unserialize(this_ptr, arg1, arg2 TSRMLS_CC))) {
 					return instance;
 				}
 			}
-
+			/* 读取配置文件并产生一个yaf_config_ini类的实例化 */
 			instance = yaf_config_ini_instance(this_ptr, arg1, arg2 TSRMLS_CC);
 
 			if (!instance) {
@@ -371,6 +394,7 @@ yaf_config_t * yaf_config_instance(yaf_config_t *this_ptr, zval *arg1, zval *arg
 			}
 
 			if (YAF_G(cache_config)) {
+				/* 如果已经缓存了配置信息，则更新配置信息 */
 				yaf_config_ini_serialize(instance, arg1, arg2 TSRMLS_CC);
 			}
 
@@ -379,6 +403,7 @@ yaf_config_t * yaf_config_instance(yaf_config_t *this_ptr, zval *arg1, zval *arg
 	}
 
 	if (Z_TYPE_P(arg1) == IS_ARRAY) {
+		/* 如果filename接收到的为一个数组，则按照yaf_config_simple的方式来处理配置信息 */
 		zval *readonly;
 
 		MAKE_STD_ZVAL(readonly);
