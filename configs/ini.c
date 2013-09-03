@@ -183,37 +183,45 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 
 				if (!(Z_STRLEN_P(key) > 1 && Z_STRVAL_P(key)[0] == '0')
 						&& is_numeric_string(Z_STRVAL_P(key), Z_STRLEN_P(key), NULL, NULL, 0) == IS_LONG) {
-					ulong skey = (ulong)zend_atol(Z_STRVAL_P(key), Z_STRLEN_P(key));
+					/* 传过来的key的长度大于1，并且第一位不能是0的数字型的字符串 */
+					ulong skey = (ulong)zend_atol(Z_STRVAL_P(key), Z_STRLEN_P(key));	/* 将字符串形式的key转换成ulong */
 					if (zend_hash_index_find(Z_ARRVAL_P(arr), skey, (void **) &find_hash) == FAILURE) {
+						/* 从arr重查找上面生成的数字型的key，如果查找失败则初始化一个空数组，并以skey为它的key添加到数组arr中 */
 						MAKE_STD_ZVAL(hash);
 						array_init(hash);
 						zend_hash_index_update(Z_ARRVAL_P(arr), skey, &hash, sizeof(zval *), NULL);
 					} else {
+						/* 查找成功，则将skey对应的值的地址赋给hash */
 						hash = *find_hash;
 					}
 				} else {
 					char *seg, *ptr;
-					char *skey = estrndup(Z_STRVAL_P(key), Z_STRLEN_P(key));
+					char *skey = estrndup(Z_STRVAL_P(key), Z_STRLEN_P(key));	/* 二进制安全复制key */
 
 					dst = arr;
-					if ((seg = php_strtok_r(skey, ".", &ptr))) {
+					if ((seg = php_strtok_r(skey, ".", &ptr))) {	/* 进行第一次分割 */
+						/* 第一次分割成功 */
 						while (seg) {
 							if (zend_symtable_find(Z_ARRVAL_P(dst), seg, strlen(seg) + 1, (void **) &find_hash) == FAILURE) {
+								/* 从arr重查找失败，生成一个空数组，并以分割出的seg为key将空数组存进dst中 */
 								MAKE_STD_ZVAL(hash);
 								array_init(hash);
 								zend_symtable_update(Z_ARRVAL_P(dst), 
 										seg, strlen(seg) + 1, (void **)&hash, sizeof(zval *), (void **)&find_hash);
 							}
-							dst = *find_hash;
-							seg = php_strtok_r(NULL, ".", &ptr);
+							dst = *find_hash;	/* 深入到查找成功或者上面生成的空数组中去 */
+							seg = php_strtok_r(NULL, ".", &ptr);	/* 继续分割传进来的key */
 						}
 						hash = dst;
 					} else {
+						/* 第一次分割失败 */
 						if (zend_symtable_find(Z_ARRVAL_P(dst), seg, strlen(seg) + 1, (void **)&find_hash) == FAILURE) {
+							/* 查找失败则生成一个空数组，以seg为key存进数组dst中 */
 							MAKE_STD_ZVAL(hash);
 							array_init(hash);
 							zend_symtable_update(Z_ARRVAL_P(dst), seg, strlen(seg) + 1, (void **)&hash, sizeof(zval *), NULL);
 						} else {
+							/* 查找成功 */
 							hash = *find_hash;
 						}
 					}
@@ -221,6 +229,7 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 				}
 
 				if (Z_TYPE_P(hash) != IS_ARRAY) {
+					/* 经过上面过程产生的hash不为数组的话，则摧毁原来的类型结构，生成一个新的空数组 */
 					zval_dtor(hash);
 					INIT_PZVAL(hash);
 					array_init(hash);
@@ -229,9 +238,9 @@ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index,
 				MAKE_STD_ZVAL(element);
 				ZVAL_ZVAL(element, value, 1, 0);
 
-				if (index && Z_STRLEN_P(index) > 0) {
+				if (index && Z_STRLEN_P(index) > 0) {	/* 字符串key处理 */
 					add_assoc_zval_ex(hash, Z_STRVAL_P(index), Z_STRLEN_P(index) + 1, element);
-				} else {
+				} else {	/* 数字key处理 */
 					add_next_index_zval(hash, element);
 				}
 			}
