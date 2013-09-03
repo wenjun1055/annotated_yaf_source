@@ -99,6 +99,8 @@ zval * yaf_config_ini_format(yaf_config_t *instance, zval **ppzval TSRMLS_DC) {
  *	define ZEND_INI_PARSER_ENTRY     	1 		Normal entry: foo = bar
  *	define ZEND_INI_PARSER_SECTION   	2 		Section: [foobar]
  *	define ZEND_INI_PARSER_POP_ENTRY 	3 		Offset entry: foo[] = bar
+ * 
+ *	总的来说，这个函数的功能就是传入key和value，然后类型，然后将key分割并把value存储到arr数组中，反正过程挺麻烦的，得结合实际的应用代码进一步分析
  */
 static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, zval *index, int callback_type, zval *arr TSRMLS_DC) {
 	zval *element;
@@ -275,42 +277,45 @@ static void yaf_config_ini_parser_cb(zval *key, zval *value, zval *index, int ca
 		/* 初始化全局变量active_ini_file_section为一个数组 */
 		MAKE_STD_ZVAL(YAF_G(active_ini_file_section));
 		array_init(YAF_G(active_ini_file_section));
-		/* 从skey重查找第一次出现：的地方 */
+		/* 从skey重查找第一次出现：的位置的指针 */
 		if ((seg = strchr(skey, ':'))) {
+			/* 查找成功、、、 */
 			char *section;
 
 			while (*(seg) == ' ' || *(seg) == ':') {
-				*(seg++) = '\0';
+				*(seg++) = '\0';	/* 将空格或者：换成字符串结束符，并将指针后移 */
 			}
-			/* 在查找在seg中最后出现：的地方 */
+			/* 在查找在seg中最后出现：的位置的指针 */
 			if ((section = strrchr(seg, ':'))) {
 			    /* muilt-inherit */
 				do {
 					while (*(section) == ' ' || *(section) == ':') {
-						*(section++) = '\0';
+						*(section++) = '\0';	/* 将空格或者：换成字符串结束符，并将指针后移 */
 					}
 					if (zend_symtable_find(Z_ARRVAL_P(arr), section, strlen(section) + 1, (void **)&parent) == SUCCESS) {
+						/* arr中查找section成功，则将查找到的数组值复制到YAF_G(active_ini_file_section) */
 						zend_hash_copy(Z_ARRVAL_P(YAF_G(active_ini_file_section)), Z_ARRVAL_PP(parent),
 							   	(copy_ctor_func_t)yaf_config_ini_zval_deep_copy, NULL, sizeof(zval *));
 					}
-				} while ((section = strrchr(seg, ':')));
+				} while ((section = strrchr(seg, ':')));	/* 继续查找在seg中最后出现：的位置的指针 */
 			}
 
 			/* remove the tail space, thinking of 'foo : bar : test' */
-            section = seg + strlen(seg) - 1;
+            section = seg + strlen(seg) - 1;	/* 移动字符串seg指针到最后一个有效字符 */
 			while (*section == ' ' || *section == ':') {
-				*(section--) = '\0';
+				*(section--) = '\0';	/* 去除最后的那个空格或者：，让seg成为一个合格的字符串 */
 			}
-
+			/* 又是查找复制的过程 */
 			if (zend_symtable_find(Z_ARRVAL_P(arr), seg, strlen(seg) + 1, (void **)&parent) == SUCCESS) {
 				zend_hash_copy(Z_ARRVAL_P(YAF_G(active_ini_file_section)), Z_ARRVAL_PP(parent),
 						(copy_ctor_func_t)yaf_config_ini_zval_deep_copy, NULL, sizeof(zval *));
 			}
 		}
-	    seg = skey + strlen(skey) - 1;
+	    seg = skey + strlen(skey) - 1;	/* 将skey字符串的指针移到最后一位 */
         while (*seg == ' ' || *seg == ':') {
-			*(seg--) = '\0';
+			*(seg--) = '\0';	/* 如果最后一位是空格或者：，则替换成字符串结束符 */
 		}
+		/* 将数组YAF_G(active_ini_file_section)的值以skey为键更新到arr中 */
 		skey_len = strlen(skey);
 		zend_symtable_update(Z_ARRVAL_P(arr), skey, skey_len + 1, &YAF_G(active_ini_file_section), sizeof(zval *), NULL);
 		if (YAF_G(ini_wanted_section) && Z_STRLEN_P(YAF_G(ini_wanted_section)) == skey_len
@@ -331,6 +336,7 @@ static void yaf_config_ini_parser_cb(zval *key, zval *value, zval *index, int ca
 /* }}} */
 #else 
 /** {{{ static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, int callback_type, zval *arr)
+ * 这里是为PHP版本低于或者等于5.2的做的兼容处理，整体过程跟上面差不多，就不做分析
 */
 static void yaf_config_ini_simple_parser_cb(zval *key, zval *value, int callback_type, zval *arr) {
 	zval *element;
