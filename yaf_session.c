@@ -109,7 +109,7 @@ static yaf_session_t * yaf_session_instance(TSRMLS_D) {
 	obj = zend_objects_get_address(instance TSRMLS_CC);
     /* 获取属性的信息$_session */
 	property_info = zend_get_property_info(obj->ce, member, 1 TSRMLS_CC);
-
+	/* 接下来的操作是Yaf_Session对PHP原生的$_SESSION的一种封装，并不是单独的复制了一份出来 */
 	Z_ADDREF_P(*sess);
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION > 3)) || (PHP_MAJOR_VERSION > 5)
 	if (!obj->properties) {
