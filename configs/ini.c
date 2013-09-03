@@ -702,20 +702,24 @@ PHP_METHOD(yaf_config_ini, get) {
 		return;
 	}
 
-	if (!len) {
+	if (!len) {	
+		/* 如果没有输入任何参数，则直接返回对象本身 */
 		RETURN_ZVAL(getThis(), 1, 0);
 	} else {
 		zval *properties;
 		char *entry, *seg, *pptr;
 
-		properties = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
+		properties = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);	/*读取$_config*/
 
 		if (Z_TYPE_P(properties) != IS_ARRAY) {
+			/* 如果$_configs不是数组，则直接返回NULL */
 			RETURN_NULL();
 		}
 
-		entry = estrndup(name, len);
+		entry = estrndup(name, len);	/* 复制name */
+		/* 对name='database'或者name='database.param.host'形式的输入进行查找 */
 		if ((seg = php_strtok_r(entry, ".", &pptr))) {
+			/* name支持原生的格式，即database.params.host这种形式，下面就是执行循环切割查找 */
 			while (seg) {
 				if (zend_hash_find(Z_ARRVAL_P(properties), seg, strlen(seg) + 1, (void **) &ppzval) == FAILURE) {
 					efree(entry);
@@ -735,6 +739,7 @@ PHP_METHOD(yaf_config_ini, get) {
 		efree(entry);
 
 		if (Z_TYPE_PP(ppzval) == IS_ARRAY) {
+			/* 如果找到的值是一个数组，则将他传入yaf_config_ini_format，再经过yaf_config_ini_instance，利用找到的值生成一个对象yaf_config_ini的对象返回 */
 			if ((ret = yaf_config_ini_format(getThis(), ppzval TSRMLS_CC))) {
 				RETURN_ZVAL(ret, 1, 1);
 			} else {
@@ -752,13 +757,15 @@ PHP_METHOD(yaf_config_ini, get) {
 /** {{{ proto public Yaf_Config_Ini::toArray(void)
 */
 PHP_METHOD(yaf_config_ini, toArray) {
+	/* 读取$_config直接返回 */
 	zval *properties = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
 	RETURN_ZVAL(properties, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::set($name, $value)
-*/
+ *	Yaf_Config_Ini里面的set只是个摆饰，根本没用的
+ */
 PHP_METHOD(yaf_config_ini, set) {
 	RETURN_FALSE;
 }
@@ -772,14 +779,17 @@ PHP_METHOD(yaf_config_ini, __isset) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &name, &len) == FAILURE) {
 		return;
 	} else {
+		/* 获取$_config */
 		zval *prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
+		/* 检验$name在$_config这个数组中是否存在 */
 		RETURN_BOOL(zend_hash_exists(Z_ARRVAL_P(prop), name, len + 1));
 	}
 }
 /* }}} */
 
-/** {{{ proto public Yaf_Config_Ini::count($name)
-*/
+/** {{{ proto public Yaf_Config_Ini::count(void)
+ *  获取$_config的元素的数量
+ */
 PHP_METHOD(yaf_config_ini, count) {
 	zval *prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
 	RETURN_LONG(zend_hash_num_elements(Z_ARRVAL_P(prop)));
@@ -787,14 +797,16 @@ PHP_METHOD(yaf_config_ini, count) {
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::offsetUnset($index)
-*/
+ *	此function也是没用的
+ */
 PHP_METHOD(yaf_config_ini, offsetUnset) {
 	RETURN_FALSE;
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::rewind(void)
-*/
+ * 	重置$_config数组的内部指针
+ */
 PHP_METHOD(yaf_config_ini, rewind) {
 	zval *prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
 	zend_hash_internal_pointer_reset(Z_ARRVAL_P(prop));
@@ -805,19 +817,22 @@ PHP_METHOD(yaf_config_ini, rewind) {
 */
 PHP_METHOD(yaf_config_ini, current) {
 	zval *prop, **ppzval, *ret;
-
+	/* 获取$_config成员数组 */
 	prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
+	/* 获取数组$_config内部指针当前指向的值 */
 	if (zend_hash_get_current_data(Z_ARRVAL_P(prop), (void **)&ppzval) == FAILURE) {
 		RETURN_FALSE;
 	}
 
 	if (Z_TYPE_PP(ppzval) == IS_ARRAY) {
+		/* 如果找到的值是一个数组，则将他传入yaf_config_ini_format，再经过yaf_config_ini_instance，利用找到的值生成一个对象yaf_config_ini的对象返回 */
 		if ((ret = yaf_config_ini_format(getThis(),  ppzval TSRMLS_CC))) {
 			RETURN_ZVAL(ret, 1, 1);
 		} else {
 			RETURN_NULL();
 		}
 	} else {
+		/* 如果不是数组则直接返回值 */
 		RETURN_ZVAL(*ppzval, 1, 0);
 	}
 }
@@ -829,13 +844,14 @@ PHP_METHOD(yaf_config_ini, key) {
 	zval *prop;
 	char *string;
 	ulong index;
-
+	/* 获取$_config成员数组 */
 	prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 0 TSRMLS_CC);
+	/* 获取数组$_config内部指针当前指向的键的值和类型 */
 	switch (zend_hash_get_current_key(Z_ARRVAL_P(prop), &string, &index, 0)) {
-		case HASH_KEY_IS_LONG:
+		case HASH_KEY_IS_LONG:	/* key的类型为长整型 */
 			RETURN_LONG(index);
 			break;
-		case HASH_KEY_IS_STRING:
+		case HASH_KEY_IS_STRING:	/* key的类型为字符串 */
 			RETURN_STRING(string, 1);
 			break;
 		default:
@@ -845,7 +861,8 @@ PHP_METHOD(yaf_config_ini, key) {
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::next(void)
-*/
+ *	将类的成员数组$_config的内部指针往后移一位
+ */
 PHP_METHOD(yaf_config_ini, next) {
 	zval *prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
 	zend_hash_move_forward(Z_ARRVAL_P(prop));
@@ -853,7 +870,8 @@ PHP_METHOD(yaf_config_ini, next) {
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::valid(void)
-*/
+ *	检测类的成员数组$_config内部的指针是否已经到了数组的结尾
+ */
 PHP_METHOD(yaf_config_ini, valid) {
 	zval *prop = zend_read_property(yaf_config_ini_ce, getThis(), ZEND_STRL(YAF_CONFIG_PROPERT_NAME), 1 TSRMLS_CC);
 	RETURN_LONG(zend_hash_has_more_elements(Z_ARRVAL_P(prop)) == SUCCESS);
@@ -861,7 +879,8 @@ PHP_METHOD(yaf_config_ini, valid) {
 /* }}} */
 
 /** {{{ proto public Yaf_Config_Ini::readonly(void)
-*/
+ *	也是个废的方法，估计鸟哥兼容以前的版本吧，手册里面都没有这个方法
+ */
 PHP_METHOD(yaf_config_ini, readonly) {
 	RETURN_TRUE;
 }
@@ -912,11 +931,13 @@ YAF_STARTUP_FUNCTION(config_ini) {
 	zend_class_entry ce;
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Config_Ini", "Yaf\\Config\\Ini", yaf_config_ini_methods);
-	yaf_config_ini_ce = zend_register_internal_class_ex(&ce, yaf_config_ce, NULL TSRMLS_CC);
+	yaf_config_ini_ce = zend_register_internal_class_ex(&ce, yaf_config_ce, NULL TSRMLS_CC);	/* extends Config_Abstract */
 
 #ifdef HAVE_SPL
+	/* implements Iterator, ArrayAccess, Countable */
 	zend_class_implements(yaf_config_ini_ce TSRMLS_CC, 3, zend_ce_iterator, zend_ce_arrayaccess, spl_ce_Countable);
 #else
+	/* implements Iterator, ArrayAccess */
 	zend_class_implements(yaf_config_ini_ce TSRMLS_CC, 2, zend_ce_iterator, zend_ce_arrayaccess);
 #endif
 
