@@ -111,7 +111,7 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 		uint  	ext_len;
 
 		ext_len	= strlen(ext);
-
+		/* $_SEVER['SCRIPT_FILENAME'] */
 		script_filename = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("SCRIPT_FILENAME") TSRMLS_CC);
 
 		do {
@@ -314,7 +314,7 @@ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 			if (jit_initialization) {
 				zend_is_auto_global(ZEND_STRL("_REQUEST") TSRMLS_CC);
 			}
-			//TODO Why
+			//TODO 为什么和前面的不同呢
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_REQUEST"), (void **)&carrier);
 			break;
 		default:
