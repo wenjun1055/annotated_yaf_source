@@ -104,6 +104,7 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 	zval *container = NULL;
 
 	if (!base_uri) {
+		/* 没有传入base_uri */
 		zval 	*script_filename;
 		char 	*file_name, *ext = YAF_G(ext);
 		size_t 	file_name_len;
@@ -217,6 +218,7 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 		zend_update_property_string(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_BASE), "" TSRMLS_CC);
 		return 1;
 	} else {
+		/* 如果传了base_uri,则将它添加到类的成员变量$_base_uri */
 		zend_update_property_string(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_BASE), base_uri TSRMLS_CC);
 		return 1;
 	}
@@ -224,10 +226,15 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 /* }}} */
 
 /** {{{ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC)
+*	通过type来选择从哪个全局变量数组中去查找name的所对应的值
 */
 zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 	zval 		**carrier = NULL, **ret;
 
+/* 
+ *	判断接下来用到的_POST、$_GET等全局变量的初始化是在脚本开始运行时候还是在需要用到的时候
+ *	http://cn2.php.net/manual/zh/ini.core.php#ini.auto-globals-jit
+ */
 #if (PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION < 4)
 	zend_bool 	jit_initialization = (PG(auto_globals_jit) && !PG(register_globals) && !PG(register_long_arrays));
 #else
@@ -238,30 +245,43 @@ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 #if PHP_YAF_DEBUG
 	switch (type) {
 		case YAF_GLOBAL_VARS_POST:
+			/* 全局符号表中查找$_POST */
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_POST"), (void **)&carrier);
 			break;
 		case YAF_GLOBAL_VARS_GET:
+			/* 全局符号表中查找$_GET */
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_GET"), (void **)&carrier);
 			break;
 		case YAF_GLOBAL_VARS_COOKIE:
+			/* 全局符号表中查找$_COOKIE */
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_COOKIE"), (void **)&carrier);
 			break;
 		case YAF_GLOBAL_VARS_SERVER:
+			/* 全局符号表中查找$_SERVER */
 			if (jit_initialization) {
+				/**
+				 *	在通过$获取变量时，PHP内核都会通过这些变量名区分是否为全局变量（ZEND_FETCH_GLOBAL）， 
+				 *	其调用的判断函数为zend_is_auto_global，这个过程是在生成中间代码过程中实现的。
+				 *	http://www.php-internals.com/book/?p=chapt03/03-03-pre-defined-variable
+				 *	TODO Why
+				 */
 				zend_is_auto_global(ZEND_STRL("_SERVER") TSRMLS_CC);
 			}
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_SERVER"), (void **)&carrier);
 			break;
 		case YAF_GLOBAL_VARS_ENV:
+			/* 全局符号表中查找$_ENV */
 			if (jit_initialization) {
 				zend_is_auto_global(ZEND_STRL("_ENV") TSRMLS_CC);
 			}
 			carrier = &PG(http_globals)[YAF_GLOBAL_VARS_ENV];
 			break;
 		case YAF_GLOBAL_VARS_FILES:
+			/* 取PHP全局变量数组的成员$_FILES */
 			carrier = &PG(http_globals)[YAF_GLOBAL_VARS_FILES];
 			break;
 		case YAF_GLOBAL_VARS_REQUEST:
+			/* 全局符号表中查找$_REQUEST */
 			if (jit_initialization) {
 				zend_is_auto_global(ZEND_STRL("_REQUEST") TSRMLS_CC);
 			}
@@ -294,6 +314,7 @@ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 			if (jit_initialization) {
 				zend_is_auto_global(ZEND_STRL("_REQUEST") TSRMLS_CC);
 			}
+			//TODO Why
 			(void)zend_hash_find(&EG(symbol_table), ZEND_STRS("_REQUEST"), (void **)&carrier);
 			break;
 		default:
@@ -302,6 +323,7 @@ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 #endif
 
 	if (!carrier || !(*carrier)) {
+		/* 获取失败，产生一个NULL，并返回 */
 		zval *empty;
 		MAKE_STD_ZVAL(empty);
 		ZVAL_NULL(empty);
@@ -309,17 +331,19 @@ zval * yaf_request_query(uint type, char * name, uint len TSRMLS_DC) {
 	}
 
 	if (!len) {
+		/* 如果没有传入name，则直接将上面查找到的全局变量数组直接返回 */
 		Z_ADDREF_P(*carrier);
 		return *carrier;
 	}
-
+	/* 从上面找到的全局变量数组中去查找name对应的值 */
 	if (zend_hash_find(Z_ARRVAL_PP(carrier), name, len + 1, (void **)&ret) == FAILURE) {
+		/* 查找失败，返回NULL */
 		zval *empty;
 		MAKE_STD_ZVAL(empty);
 		ZVAL_NULL(empty);
 		return empty;
 	}
-
+	/* 查找成功，返回找到的值 */
 	Z_ADDREF_P(*ret);
 	return *ret;
 }
