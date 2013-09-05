@@ -104,29 +104,40 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 	zval *container = NULL;
 
 	if (!base_uri) {
-		/* 没有传入base_uri */
+		/* 没有传入base_uri，就自己分析找到base_uri */
 		zval 	*script_filename;
 		char 	*file_name, *ext = YAF_G(ext);
 		size_t 	file_name_len;
 		uint  	ext_len;
 
 		ext_len	= strlen(ext);
-		/* $_SEVER['SCRIPT_FILENAME'] */
+		/* $_SEVER['SCRIPT_FILENAME'] 当前执行脚本的绝对路径 */
 		script_filename = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("SCRIPT_FILENAME") TSRMLS_CC);
+
+		/**
+		 *	$filename = (isset($_SERVER['SCRIPT_FILENAME'])) ? basename($_SERVER['SCRIPT_FILENAME']) : '';
+    	 *	if (isset($_SERVER['SCRIPT_NAME']) && basename($_SERVER['SCRIPT_NAME']) === $filename) {
+         *		$base_url = $_SERVER['SCRIPT_NAME'];
+    	 *	} elseif (isset($_SERVER['PHP_SELF']) && basename($_SERVER['PHP_SELF']) === $filename) {
+         *		$base_url = $_SERVER['PHP_SELF'];
+    	 *	} elseif (isset($_SERVER['ORIG_SCRIPT_NAME']) && basename($_SERVER['ORIG_SCRIPT_NAME']) === $filename) {
+         *		$base_url = $_SERVER['ORIG_SCRIPT_NAME'];
+    	 *	}
+		 */
 
 		do {
 			if (script_filename && IS_STRING == Z_TYPE_P(script_filename)) {
 				zval *script_name, *phpself_name, *orig_name;
-
+				/* $_SEVER['SCRIPT_NAME'] 包含当前脚本的路径 */
 				script_name = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("SCRIPT_NAME") TSRMLS_CC);
+				/* basename($_SEVER['SCRIPT_FILENAME'], '.php')的实现，获取文件的名称，不带后缀 */
 				php_basename(Z_STRVAL_P(script_filename), Z_STRLEN_P(script_filename), ext, ext_len, &file_name, &file_name_len TSRMLS_CC);
 				if (script_name && IS_STRING == Z_TYPE_P(script_name)) {
 					char 	*script;
 					size_t 	script_len;
-
+					/* basename($_SEVER['SCRIPT_NAME'], '.php') */
 					php_basename(Z_STRVAL_P(script_name), Z_STRLEN_P(script_name),
 							NULL, 0, &script, &script_len TSRMLS_CC);
-
 					if (strncmp(file_name, script, file_name_len) == 0) {
 						basename 	 = Z_STRVAL_P(script_name);
 						basename_len = Z_STRLEN_P(script_name);
@@ -145,6 +156,7 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 					size_t	phpself_len;
 
 					php_basename(Z_STRVAL_P(phpself_name), Z_STRLEN_P(phpself_name), NULL, 0, &phpself, &phpself_len TSRMLS_CC);
+					/* TODO：两个一样说明什么问题呢 */
 					if (strncmp(file_name, phpself, file_name_len) == 0) {
 						basename	 = Z_STRVAL_P(phpself_name);
 						basename_len = Z_STRLEN_P(phpself_name);
@@ -156,7 +168,12 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 					efree(phpself);
 				}
 				zval_ptr_dtor(&phpself_name);
-
+				/** 
+				 *	$SERVER['ORIG_SCRIPT_NAME'] 
+				 *	要知道PHP当前是通过CGI来运行，还是在Apache内部运行，可以检查一下环境变量orig_script_name。
+				 *	如果PHP通过CGI来运行，这个变量的值就是/Php/Php.exe。
+				 *	如果Apache将PHP脚本作为模块来运行，该变量的值应该是/Phptest.php
+				 */
 				orig_name = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("ORIG_SCRIPT_NAME") TSRMLS_CC);
 				if (orig_name && IS_STRING == Z_TYPE_P(orig_name)) {
 					char 	*orig;
@@ -179,9 +196,11 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 		zval_ptr_dtor(&script_filename);
 
 		if (basename && strstr(request_uri, basename) == request_uri) {
+			/* basename字符串最后一个字符是'/'的话，则去掉最后一个 */
 			if (*(basename + basename_len - 1) == '/') {
 				--basename_len;
 			}
+			/* 设置$_base_uri */
 			zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_BASE), basename, basename_len TSRMLS_CC);
 			if (container) {
 				zval_ptr_dtor(&container);
