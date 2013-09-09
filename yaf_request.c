@@ -89,6 +89,7 @@ ZEND_END_ARG_INFO()
 /* }}} */
 
 /** {{{ yaf_request_t * yaf_request_instance(zval *this_ptr, char *other TSRMLS_DC)
+ *	产生一个yaf_request_http的实例，并且返回
 */
 yaf_request_t * yaf_request_instance(yaf_request_t *this_ptr, char *other TSRMLS_DC) {
 	yaf_request_t *instance = yaf_request_http_instance(this_ptr, NULL, other TSRMLS_CC);
@@ -380,10 +381,11 @@ yaf_request_t * yaf_request_get_method(yaf_request_t *request TSRMLS_DC) {
 */
 zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 	zval *lang;
-
+	//获取$language
 	lang = zend_read_property(yaf_request_ce, instance, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_LANG), 1 TSRMLS_CC);
 
 	if (IS_STRING != Z_TYPE_P(lang)) {
+		/* $_SERVER['HTTP_ACCEPT_LANGUAGE'] */
 		zval * accept_langs = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("HTTP_ACCEPT_LANGUAGE") TSRMLS_CC);
 
 		if (IS_STRING != Z_TYPE_P(accept_langs) || !Z_STRLEN_P(accept_langs)) {
@@ -393,9 +395,9 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 			uint	prefer_len = 0;
 			double	max_qvlaue = 0;
 			char 	*prefer = NULL;
-			char  	*langs = estrndup(Z_STRVAL_P(accept_langs), Z_STRLEN_P(accept_langs));
+			char  	*langs = estrndup(Z_STRVAL_P(accept_langs), Z_STRLEN_P(accept_langs));	/* 复制 */
 
-			seg = php_strtok_r(langs, ",", &ptrptr);
+			seg = php_strtok_r(langs, ",", &ptrptr);	/* 截取 strtok() */
 			while(seg) {
 				char *qvalue;
 				while( *(seg) == ' ') seg++ ;
@@ -448,6 +450,7 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 /** {{{  int yaf_request_is_dispatched(yaf_request_t *request TSRMLS_DC)
 */
  int yaf_request_is_dispatched(yaf_request_t *request TSRMLS_DC) {
+ 	/* 获取$routed并返回值 */
 	zval *dispatched = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_STATE), 1 TSRMLS_CC);
 	return Z_LVAL_P(dispatched);
 }
@@ -456,6 +459,7 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 /** {{{  int yaf_request_set_dispatched(yaf_request_t *instance, int flag TSRMLS_DC)
 */
  int yaf_request_set_dispatched(yaf_request_t *instance, int flag TSRMLS_DC) {
+ 	/* 设置$dispatched，并返回1 */
 	zend_update_property_bool(yaf_request_ce, instance, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_STATE), flag TSRMLS_CC);
 	return 1;
 }
@@ -464,6 +468,7 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 /** {{{  int yaf_request_set_routed(yaf_request_t *request, int flag TSRMLS_DC)
 */
  int yaf_request_set_routed(yaf_request_t *request, int flag TSRMLS_DC) {
+ 	/* 返回$routed并且返回1 */
 	zend_update_property_bool(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ROUTED), flag TSRMLS_CC);
 	return 1;
 }
@@ -472,8 +477,9 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 /** {{{  int yaf_request_set_params_single(yaf_request_t *request, char *key, int len, zval *value TSRMLS_DC)
 */
  int yaf_request_set_params_single(yaf_request_t *request, char *key, int len, zval *value TSRMLS_DC) {
+ 	/* 获取$params */
 	zval *params = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), 1 TSRMLS_CC);
-
+	/* 将传递进来的key和value添加到数组params中 */
 	if (zend_hash_update(Z_ARRVAL_P(params), key, len+1, &value, sizeof(zval *), NULL) == SUCCESS) {
 		Z_ADDREF_P(value);
 		return 1;
@@ -486,8 +492,10 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 /** {{{  int yaf_request_set_params_multi(yaf_request_t *request, zval *values TSRMLS_DC)
 */
  int yaf_request_set_params_multi(yaf_request_t *request, zval *values TSRMLS_DC) {
+ 	/* 获取$params */
 	zval *params = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), 1 TSRMLS_CC);
 	if (values && Z_TYPE_P(values) == IS_ARRAY) {
+		/* 将数组values复制到params */
 		zend_hash_copy(Z_ARRVAL_P(params), Z_ARRVAL_P(values), (copy_ctor_func_t) zval_add_ref, NULL, sizeof(zval *));
 		return 1;
 	}
@@ -499,7 +507,9 @@ zval * yaf_request_get_language(yaf_request_t *instance TSRMLS_DC) {
 */
  zval * yaf_request_get_param(yaf_request_t *request, char *key, int len TSRMLS_DC) {
 	zval **ppzval;
+	/* 获取$params */
 	zval *params = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), 1 TSRMLS_CC);
+	/* hash查找并且返回 */
 	if (zend_hash_find(Z_ARRVAL_P(params), key, len + 1, (void **) &ppzval) == SUCCESS) {
 		return *ppzval;
 	}
@@ -556,6 +566,7 @@ YAF_REQUEST_METHOD(yaf_request, Server, YAF_GLOBAL_VARS_SERVER);
 
 /** {{{ proto public Yaf_Request_Abstract::getModuleName(void)
 */
+/* 获取$module */
 PHP_METHOD(yaf_request, getModuleName) {
 	zval *module = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
 	RETVAL_ZVAL(module, 1, 0);
@@ -564,6 +575,7 @@ PHP_METHOD(yaf_request, getModuleName) {
 
 /** {{{ proto public Yaf_Request_Abstract::getControllerName(void)
 */
+/* 获取$controller */
 PHP_METHOD(yaf_request, getControllerName) {
 	zval *controller = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), 1 TSRMLS_CC);
 	RETVAL_ZVAL(controller, 1, 0);
@@ -572,6 +584,7 @@ PHP_METHOD(yaf_request, getControllerName) {
 
 /** {{{ proto public Yaf_Request_Abstract::getActionName(void)
 */
+/* 获取$action */
 PHP_METHOD(yaf_request, getActionName) {
 	zval *action = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), 1 TSRMLS_CC);
 	RETVAL_ZVAL(action, 1, 0);
@@ -587,14 +600,14 @@ PHP_METHOD(yaf_request, setModuleName) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &module) == FAILURE) {
 		return;
 	}
-
+	/* module名字必须是一个字符串 */
 	if (Z_TYPE_P(module) != IS_STRING) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a string module name");
 		RETURN_FALSE;
 	}
-
+	/* $this->module = $module */
 	zend_update_property(yaf_request_ce, self, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), module TSRMLS_CC);
-
+	/* return $this; */
 	RETURN_ZVAL(self, 1, 0);
 }
 /* }}} */
@@ -608,14 +621,14 @@ PHP_METHOD(yaf_request, setControllerName) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &controller) == FAILURE) {
 		return;
 	}
-
+	/* controller名字必须是一个字符串 */
 	if (Z_TYPE_P(controller) != IS_STRING) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a string controller name");
 		RETURN_FALSE;
 	}
-
+	/* $this->controller = $controller */
 	zend_update_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), controller TSRMLS_CC);
-
+	/* return $this; */
 	RETURN_ZVAL(self, 1, 0);
 }
 /* }}} */
@@ -629,14 +642,14 @@ PHP_METHOD(yaf_request, setActionName) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &action) == FAILURE) {
 		return;
 	}
-
+	/* action名字必须是一个字符串 */
 	if (Z_TYPE_P(action) != IS_STRING) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a string action name");
 		RETURN_FALSE;
 	}
-
+	/* $this->action = $action */
 	zend_update_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), action TSRMLS_CC);
-
+	/* return $this; */
 	RETURN_ZVAL(self, 1, 0);
 }
 /* }}} */
@@ -646,10 +659,11 @@ PHP_METHOD(yaf_request, setActionName) {
 PHP_METHOD(yaf_request, setParam) {
 	uint argc;
 	yaf_request_t *self	= getThis();
-
+	/* 获取传递进来的参数的个数 */
 	argc = ZEND_NUM_ARGS();
 
 	if (1 == argc) {
+		/* 如果传递进来的参数只有一个，则认为这个参数为一个数组，利用数组的方式来进行复制 */
 		zval *value ;
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "a", &value) == FAILURE) {
 			return;
@@ -658,6 +672,7 @@ PHP_METHOD(yaf_request, setParam) {
 			RETURN_ZVAL(self, 1, 0);
 		}
 	} else if (2 == argc) {
+		/* 如果传递进来的参数为两个，则将它们作为键值对来进行保存 */
 		zval *value;
 		char *name;
 		uint len;
@@ -677,6 +692,7 @@ PHP_METHOD(yaf_request, setParam) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getParam(string $name, $mixed $default = NULL)
+*	根据key从param中获取值并返回，如果没有查询到则返回设置的默认值
 */
 PHP_METHOD(yaf_request, getParam) {
 	char *name;
@@ -702,6 +718,7 @@ PHP_METHOD(yaf_request, getParam) {
 /** {{{ proto public Yaf_Request_Abstract::getException(void)
 */
 PHP_METHOD(yaf_request, getException) {
+	/* 获取$_exception */
 	zval *exception = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_EXCEPTION), 1 TSRMLS_CC);
 	if (IS_OBJECT == Z_TYPE_P(exception)
 			&& instanceof_function(Z_OBJCE_P(exception),
@@ -719,6 +736,7 @@ PHP_METHOD(yaf_request, getException) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getParams(void)
+* 获取$params
 */
 PHP_METHOD(yaf_request, getParams) {
 	zval *params = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), 1 TSRMLS_CC);
@@ -727,6 +745,7 @@ PHP_METHOD(yaf_request, getParams) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getLanguage(void)
+* 获取$language
 */
 PHP_METHOD(yaf_request, getLanguage) {
 	zval *lang = yaf_request_get_language(getThis() TSRMLS_CC);
@@ -735,6 +754,7 @@ PHP_METHOD(yaf_request, getLanguage) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getMethod(void)
+* 获取$method
 */
 PHP_METHOD(yaf_request, getMethod) {
 	zval *method = yaf_request_get_method(getThis() TSRMLS_CC);
@@ -743,6 +763,7 @@ PHP_METHOD(yaf_request, getMethod) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::isDispatched(void)
+* 获取$dispatched
 */
 PHP_METHOD(yaf_request, isDispatched) {
 	RETURN_BOOL(yaf_request_is_dispatched(getThis() TSRMLS_CC));
@@ -750,6 +771,7 @@ PHP_METHOD(yaf_request, isDispatched) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::setDispatched(void)
+* 设置$dispatched值为1
 */
 PHP_METHOD(yaf_request, setDispatched) {
 	RETURN_BOOL(yaf_request_set_dispatched(getThis(), 1 TSRMLS_CC));
@@ -757,6 +779,7 @@ PHP_METHOD(yaf_request, setDispatched) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::setBaseUri(string $name)
+*	手动设置$_base_uri，如果传入的不是合法的字符串的uri则返回false，base_uri设置成功后返回$this
 */
 PHP_METHOD(yaf_request, setBaseUri) {
 	zval *uri;
@@ -778,6 +801,7 @@ PHP_METHOD(yaf_request, setBaseUri) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getBaseUri(string $name)
+*	获取base_uri
 */
 PHP_METHOD(yaf_request, getBaseUri) {
 	zval *uri = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_BASE), 1 TSRMLS_CC);
@@ -786,6 +810,7 @@ PHP_METHOD(yaf_request, getBaseUri) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::getRequestUri(string $name)
+*	获取$uri
 */
 PHP_METHOD(yaf_request, getRequestUri) {
 	zval *uri = zend_read_property(yaf_request_ce, getThis(), ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_URI), 1 TSRMLS_CC);
@@ -794,6 +819,7 @@ PHP_METHOD(yaf_request, getRequestUri) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::setRequestUri(string $name)
+*	设置$uri，成功后返回$this
 */
 PHP_METHOD(yaf_request, setRequestUri) {
 	char *uri;
@@ -809,6 +835,7 @@ PHP_METHOD(yaf_request, setRequestUri) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::isRouted(void)
+*	判断$routed
 */
 PHP_METHOD(yaf_request, isRouted) {
 	RETURN_BOOL(yaf_request_is_routed(getThis() TSRMLS_CC));
@@ -816,6 +843,7 @@ PHP_METHOD(yaf_request, isRouted) {
 /* }}} */
 
 /** {{{ proto public Yaf_Request_Abstract::setRouted(void)
+*	设置$routed的值为1，成功后返回$this
 */
 PHP_METHOD(yaf_request, setRouted) {
 	if (yaf_request_set_routed(getThis(),  1 TSRMLS_CC)) {
@@ -868,8 +896,24 @@ YAF_STARTUP_FUNCTION(request){
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Request_Abstract", "Yaf\\Request_Abstract", yaf_request_methods);
 	yaf_request_ce 			= zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* abstract class Yaf_Request_Abstract */
 	yaf_request_ce->ce_flags = ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
 
+	/**
+	 *	public $module = null;
+	 *	public $controller = null;
+	 *	public $action = null;
+	 *	public $method = null;
+	 *
+	 *	protected $params = null;
+	 *	protected $language = null;
+	 *	protected $_exception = null;
+	 *
+	 *	protected $_base_uri = "";
+	 *	protected $uri = "";
+	 *	protected $dispatched = 0;
+	 *	protected $routed = 0;
+	 */
 	zend_declare_property_null(yaf_request_ce, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE),     ZEND_ACC_PUBLIC	TSRMLS_CC);
 	zend_declare_property_null(yaf_request_ce, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), ZEND_ACC_PUBLIC TSRMLS_CC);
 	zend_declare_property_null(yaf_request_ce, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION),     ZEND_ACC_PUBLIC TSRMLS_CC);
