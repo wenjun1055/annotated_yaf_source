@@ -26,6 +26,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 	yaf_request_t *instance;
 	zval *method, *params, *settled_uri = NULL;
 
+	/* 如果传入了已经初始化的类的实例则直接使用，没有的话就初始化一个yaf_request_http_ce的实例 */
 	if (this_ptr) {
 		instance = this_ptr;
 	} else {
@@ -33,7 +34,23 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 		object_init_ex(instance, yaf_request_http_ce);
 	}
 
+	/**
+	 *	BEGIN_EXTERN_C()
+	 *	ifdef ZTS
+	 *		define SG(v) TSRMG(sapi_globals_id, sapi_globals_struct *, v)
+	 *		SAPI_API extern int sapi_globals_id;
+	 *	else
+	 *		define SG(v) (sapi_globals.v)
+	 *		extern SAPI_API sapi_globals_struct sapi_globals;
+	 *	endif
+	 */
+
     MAKE_STD_ZVAL(method);
+    /** 
+     *	1.如果能从sapi中获取到request_method的话则直接将渠道的request_method的值复制给method,
+     *	2.如果sapi_module.name的前三个字符是cli的话则method的值为cli
+     *	3.都不符合上面的情况的话则给method赋值为Unknow
+     */
     if (SG(request_info).request_method) {
         ZVAL_STRING(method, (char *)SG(request_info).request_method, 1);
     } else if (strncasecmp(sapi_module.name, "cli", 3)) {
@@ -41,10 +58,12 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
     } else {
         ZVAL_STRING(method, "Cli", 1);
     }
+    /* $this->method = $method */
 	zend_update_property(yaf_request_http_ce, instance, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_METHOD), method TSRMLS_CC);
 	zval_ptr_dtor(&method);
 
 	if (request_uri) {
+		/* 如果传入了request_uri,则将它的值直接给新生成的字符串settled_uri */
 		MAKE_STD_ZVAL(settled_uri);
 		ZVAL_STRING(settled_uri, request_uri, 1);
 	} else {
@@ -52,6 +71,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 		do {
 #ifdef PHP_WIN32
 			/* check this first so IIS will catch */
+			/* $_SERVER['HTTP_X_REWRITE_URL'] */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("HTTP_X_REWRITE_URL") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				settled_uri = uri;
@@ -60,9 +80,12 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			zval_ptr_dtor(&uri);
 
 			/* IIS7 with URL Rewrite: make sure we get the unencoded url (double slash problem) */
+			/* $_SERVER['IIS_WasUrlRewritten'] */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("IIS_WasUrlRewritten") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
+				/* $_SERVER['IIS_WasUrlRewritten'] */
 				zval *rewrited = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("IIS_WasUrlRewritten") TSRMLS_CC);
+				/* $_SERVER['UNENCODED_URL'] */
 				zval *unencode = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("UNENCODED_URL") TSRMLS_CC);
 				if (Z_TYPE_P(rewrited) = IS_LONG
 						&& Z_LVAL_P(rewrited) == 1
@@ -74,6 +97,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			}
 			zval_ptr_dtor(&uri);
 #endif
+			/* $_SERVER['PATH_INFO'] */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("PATH_INFO") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				settled_uri = uri;
@@ -81,18 +105,39 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			}
 			zval_ptr_dtor(&uri);
 
+			/* $_SERVER['REQUEST_URI'] */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("REQUEST_URI") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				/* Http proxy reqs setup request uri with scheme and host [and port] + the url path, only use url path */
+				/* uri以http开头 */
 				if (strstr(Z_STRVAL_P(uri), "http") == Z_STRVAL_P(uri)) {
+
+					/**
+					 *	typedef struct php_url {
+					 *		char *scheme;
+					 *		char *user;
+					 *		char *pass;
+					 *		char *host;
+					 *		unsigned short port;
+					 *		char *path;
+					 *		char *query;
+					 *		char *fragment;
+					 *	} php_url;
+					 *
+					 *	php_url_parse的解析跟function parse_url()一样
+					 *	http://lxr.php.net/xref/PHP_5_4/ext/standard/url.c#97
+					 */
 					php_url *url_info = php_url_parse(Z_STRVAL_P(uri));
 					zval_ptr_dtor(&uri);
-
+					/* 解析成功，存在path，则将path的值赋给settled_uri */
 					if (url_info && url_info->path) {
 						MAKE_STD_ZVAL(settled_uri);
 						ZVAL_STRING(settled_uri, url_info->path, 1);
 					}
-
+					/** 
+					 *	释放php_url结构体中的每一项 
+					 *	http://lxr.php.net/xref/PHP_5_4/ext/standard/url.c#42
+					 */
 					php_url_free(url_info);
 				} else {
 					char *pos  = NULL;
