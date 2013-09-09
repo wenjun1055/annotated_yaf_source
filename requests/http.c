@@ -178,9 +178,11 @@ YAF_REQUEST_METHOD(yaf_request_http, Cookie, 	YAF_GLOBAL_VARS_COOKIE);
 /** {{{ proto public Yaf_Request_Http::isXmlHttpRequest()
 */
 PHP_METHOD(yaf_request_http, isXmlHttpRequest) {
+	/* $_SERVER['HTTP_X_REQUESTED_WITH'] */
 	zval * header = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("HTTP_X_REQUESTED_WITH") TSRMLS_CC);
 	if (Z_TYPE_P(header) == IS_STRING
 			&& strncasecmp("XMLHttpRequest", Z_STRVAL_P(header), Z_STRLEN_P(header)) == 0) {
+		/* $_SERVER['HTTP_X_REQUESTED_WITH']的值为字符串，并且值为XMLHttpRequest，则返回true，否则返回false */
 		zval_ptr_dtor(&header);
 		RETURN_TRUE;
 	}
@@ -200,10 +202,12 @@ PHP_METHOD(yaf_request_http, get) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|z", &name, &len, &def) == FAILURE) {
 		WRONG_PARAM_COUNT;
 	} else {
+		/* 首先尝试从$params中获取，找到的话就直接返回，没有找到的话就进行下面的操作 */
 		zval *value = yaf_request_get_param(getThis(), name, len TSRMLS_CC);
 		if (value) {
 			RETURN_ZVAL(value, 1, 0);
 		} else {
+			/* 如果在$params中没有找到，那就依次在post->get->cookie->server中进行查找，找到后立马就返回 */
 			zval *params	= NULL;
 			zval **ppzval	= NULL;
 
@@ -226,6 +230,7 @@ PHP_METHOD(yaf_request_http, get) {
 				}
 
 			}
+			/* 如果上面的五个都没有找到的话就返回默认值 */
 			if (def) {
 				RETURN_ZVAL(def, 1, 0);
 			}
@@ -245,6 +250,10 @@ PHP_METHOD(yaf_request_http, __construct) {
 
 	yaf_request_t *self = getThis();
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|ss", &request_uri, &rlen, &base_uri, &blen) == FAILURE) {
+		/*
+		 *	zval_dtor(self);
+		 *	ZVAL_FALSE(obj);
+		 */
 		YAF_UNINITIALIZED_OBJECT(getThis());
 		return;
 	}
@@ -280,8 +289,13 @@ zend_function_entry yaf_request_http_methods[] = {
 YAF_STARTUP_FUNCTION(request_http){
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Request_Http", "Yaf\\Request\\Http", yaf_request_http_methods);
+	/* class Yaf_Request_Http extends Yaf_Request_Abstract */
 	yaf_request_http_ce = zend_register_internal_class_ex(&ce, yaf_request_ce, NULL TSRMLS_CC);
 
+	/**
+	 *	constant SCHEME_HTTP = 'http';
+	 *	constant SCHEME_HTTPS = 'https';
+	 */
 	zend_declare_class_constant_string(yaf_request_ce, ZEND_STRL("SCHEME_HTTP"), "http" TSRMLS_CC);
 	zend_declare_class_constant_string(yaf_request_ce, ZEND_STRL("SCHEME_HTTPS"), "https" TSRMLS_CC);
 
