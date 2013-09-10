@@ -49,7 +49,7 @@ yaf_request_t * yaf_request_simple_instance(yaf_request_t *this_ptr, zval *modul
 			ZVAL_STRING(method, (char *)SG(request_info).request_method, 1);
 		}
 	} else {
-		/* method.refcount__gc++ */
+		/* method.refcount__gc++ 后面还要使用 */
 		Z_ADDREF_P(method);
 	}
 

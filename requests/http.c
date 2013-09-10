@@ -84,11 +84,13 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			/* 2.判断$_SERVER['IIS_WasUrlRewritten']是否存在，然后进行一些列的判断来确定settled_uri */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("IIS_WasUrlRewritten") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
-				/* $_SERVER['IIS_WasUrlRewritten'] */
+				/* Why:外面已经取过一次了，为什么不直接用，又来一次重复操作呢 */
 				zval *rewrited = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("IIS_WasUrlRewritten") TSRMLS_CC);
 				/* $_SERVER['UNENCODED_URL'] */
 				zval *unencode = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("UNENCODED_URL") TSRMLS_CC);
-				if (Z_TYPE_P(rewrited) = IS_LONG
+				//找到一个bug
+				//if (Z_TYPE_P(rewrited) = IS_LONG
+				if (Z_TYPE_P(rewrited) == IS_LONG
 						&& Z_LVAL_P(rewrited) == 1
 						&& Z_TYPE_P(unencode) == IS_STRING
 						&& Z_STRLEN_P(unencode) > 0) {
@@ -240,6 +242,7 @@ YAF_REQUEST_METHOD(yaf_request_http, Cookie, 	YAF_GLOBAL_VARS_COOKIE);
 PHP_METHOD(yaf_request_http, isXmlHttpRequest) {
 	/* $_SERVER['HTTP_X_REQUESTED_WITH'] */
 	zval * header = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("HTTP_X_REQUESTED_WITH") TSRMLS_CC);
+	/* if ($_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest') */
 	if (Z_TYPE_P(header) == IS_STRING
 			&& strncasecmp("XMLHttpRequest", Z_STRVAL_P(header), Z_STRLEN_P(header)) == 0) {
 		/* $_SERVER['HTTP_X_REQUESTED_WITH']的值为字符串，并且值为XMLHttpRequest，则返回true，否则返回false */
