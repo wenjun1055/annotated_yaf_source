@@ -68,10 +68,11 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 		ZVAL_STRING(settled_uri, request_uri, 1);
 	} else {
 		zval *uri;
+		/* 整个do{}while(0)里面的所有操作都是在进行settled_uri值的查找并且赋值的操作 */
 		do {
 #ifdef PHP_WIN32
 			/* check this first so IIS will catch */
-			/* $_SERVER['HTTP_X_REWRITE_URL'] */
+			/* 1.判断$_SERVER['HTTP_X_REWRITE_URL']是否存在，存在的话就以它为settled_uri */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("HTTP_X_REWRITE_URL") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				settled_uri = uri;
@@ -80,7 +81,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			zval_ptr_dtor(&uri);
 
 			/* IIS7 with URL Rewrite: make sure we get the unencoded url (double slash problem) */
-			/* $_SERVER['IIS_WasUrlRewritten'] */
+			/* 2.判断$_SERVER['IIS_WasUrlRewritten']是否存在，然后进行一些列的判断来确定settled_uri */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("IIS_WasUrlRewritten") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				/* $_SERVER['IIS_WasUrlRewritten'] */
@@ -97,7 +98,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			}
 			zval_ptr_dtor(&uri);
 #endif
-			/* $_SERVER['PATH_INFO'] */
+			/* 3.判断$_SERVER['PATH_INFO']是否存在，如果存在则赋值给settled_uri */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("PATH_INFO") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				settled_uri = uri;
@@ -105,8 +106,12 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			}
 			zval_ptr_dtor(&uri);
 
-			/* $_SERVER['REQUEST_URI'] */
+			/* 	4.判断$_SERVER['REQUEST_URI']是否存在
+			 *	如果存在，则判断它的值的开头是否为http,如果是则认为$_SERVER['REQUEST_URI']的值是一个完整的链接，利用parse_url()进行分解url,并且将分解出来的path赋值给settled_uri；
+			 *	如果存在，并且字符串不是以http开头，则判断字符串中是否有?，如果存在?则截取?前面的部分赋值给settled_uri,不存在?的话直接将$_SERVER['REQUEST_URI']赋值给settled_uri
+			 */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("REQUEST_URI") TSRMLS_CC);
+			/* $_SERVER['REQUEST_URI']存在 */
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				/* Http proxy reqs setup request uri with scheme and host [and port] + the url path, only use url path */
 				/* uri以http开头 */
@@ -141,6 +146,10 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 					php_url_free(url_info);
 				} else {
 					char *pos  = NULL;
+					/* 	判断$_SERVER['REQUEST_URI']中是否带了参数
+					 *	如果带了?的话，直接将?前面的赋值给settled_uri
+					 *	没有的话直接赋值给settled_uri 
+					 */
 					if ((pos = strstr(Z_STRVAL_P(uri), "?"))) {
 						MAKE_STD_ZVAL(settled_uri);
 						ZVAL_STRINGL(settled_uri, Z_STRVAL_P(uri), pos - Z_STRVAL_P(uri), 1);
@@ -153,6 +162,9 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 			}
 			zval_ptr_dtor(&uri);
 
+			/**
+			 *	5.判断$_SERVER['ORIG_PATH_INFO']是否存在，存在直接赋值给settled_uri
+			 */
 			uri = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("ORIG_PATH_INFO") TSRMLS_CC);
 			if (Z_TYPE_P(uri) != IS_NULL) {
 				/* intended do nothing */
@@ -168,29 +180,32 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 		} while (0);
 	}
 
+	/* 判断经过上面的直接输入或者层层解析是否得到了settled_uri */
 	if (settled_uri) {
+		/* 获取settled_uri结构体中字符串的值 */
 		char *p = Z_STRVAL_P(settled_uri);
-
+		/* 字符串的开头两个是//，则字符串指针往后移一位 */
 		while (*p == '/' && *(p + 1) == '/') {
 			p++;
 		}
-
+		/* 经过上面的判断后如果p所指的字符串跟settled_uri本身的字符串值不同时候，使用处理过后p的值替换掉原来的值，所以鸟哥才用了一个garbage吧 */
 		if (p != Z_STRVAL_P(settled_uri)) {
 			char *garbage = Z_STRVAL_P(settled_uri);
 			ZVAL_STRING(settled_uri, p, 1);
 			efree(garbage);
 		}
-
+		/* 将层层处理后得到的settled_uri赋值给$this->uri */
 		zend_update_property(yaf_request_http_ce, instance, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_URI), settled_uri TSRMLS_CC);
+		/* 设置base_uri */
 		yaf_request_set_base_uri(instance, base_uri, Z_STRVAL_P(settled_uri) TSRMLS_CC);
 		zval_ptr_dtor(&settled_uri);
 	}
-
+	/* $this->params = array(); */
 	MAKE_STD_ZVAL(params);
 	array_init(params);
 	zend_update_property(yaf_request_http_ce, instance, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), params TSRMLS_CC);
 	zval_ptr_dtor(&params);
-
+	/* return $this; */
 	return instance;
 }
 /* }}} */
