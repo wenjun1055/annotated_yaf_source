@@ -102,7 +102,7 @@ yaf_request_t * yaf_request_instance(yaf_request_t *this_ptr, char *other TSRMLS
 int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *request_uri TSRMLS_DC) {
 	char *basename = NULL;
 	uint basename_len = 0;
-	zval *container = NULL;
+	zval *container = NULL;		//没看出这个有啥用，赋值了后啥都没做就直接释放了
 
 	if (!base_uri) {
 		/* 没有传入base_uri，就自己分析找到base_uri */
@@ -116,13 +116,14 @@ int yaf_request_set_base_uri(yaf_request_t *request, char *base_uri, char *reque
 		script_filename = yaf_request_query(YAF_GLOBAL_VARS_SERVER, ZEND_STRL("SCRIPT_FILENAME") TSRMLS_CC);
 
 		/**
-		 *	$filename = (isset($_SERVER['SCRIPT_FILENAME'])) ? basename($_SERVER['SCRIPT_FILENAME']) : '';
-    	 *	if (isset($_SERVER['SCRIPT_NAME']) && basename($_SERVER['SCRIPT_NAME']) === $filename) {
-         *		$base_url = $_SERVER['SCRIPT_NAME'];
-    	 *	} elseif (isset($_SERVER['PHP_SELF']) && basename($_SERVER['PHP_SELF']) === $filename) {
-         *		$base_url = $_SERVER['PHP_SELF'];
-    	 *	} elseif (isset($_SERVER['ORIG_SCRIPT_NAME']) && basename($_SERVER['ORIG_SCRIPT_NAME']) === $filename) {
-         *		$base_url = $_SERVER['ORIG_SCRIPT_NAME'];
+    	 *	if (isset($_SERVER['SCRIPT_FILENAME'])) {
+		 *		if (isset($_SERVER['SCRIPT_NAME']) && basename($_SEVER['SCRIPT_FILENAME'], '.php') == basename($_SEVER['SCRIPT_NAME'])) {
+    	 *			$basename = $_SERVER['SCRIPT_NAME']; 		
+    	 *		} elseif (isset($_SERVER['PHP_SELF']) && basename($_SEVER['SCRIPT_FILENAME'], '.php') == basename($_SEVER['PHP_SELF'])) {
+		 *			$basename = $_SERVER['PHP_SELF'];
+    	 *		} elseif (isset($_SERVER['ORIG_SCRIPT_NAME']) && basename($_SEVER['SCRIPT_FILENAME'], '.php') == basename($_SEVER['ORIG_SCRIPT_NAME'])) {
+		 *			$basename = $_SERVER['ORIG_SCRIPT_NAME'];
+    	 *		}
     	 *	}
 		 */
 
