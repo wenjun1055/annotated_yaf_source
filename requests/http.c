@@ -47,7 +47,7 @@ yaf_request_t * yaf_request_http_instance(yaf_request_t *this_ptr, char *request
 
     MAKE_STD_ZVAL(method);
     /** 
-     *	1.如果能从sapi中获取到request_method的话则直接将渠道的request_method的值复制给method,
+     *	1.如果能从sapi中获取到request_method的话则直接将取到的request_method的值复制给method,
      *	2.如果sapi_module.name的前三个字符是cli的话则method的值为cli
      *	3.都不符合上面的情况的话则给method赋值为Unknow
      */
@@ -296,6 +296,7 @@ PHP_METHOD(yaf_request_http, get) {
 			}
 		}
 	}
+	/* 如果连默认值都没有的话，只能返回NULL了 */
 	RETURN_NULL();
 }
 /* }}} */
