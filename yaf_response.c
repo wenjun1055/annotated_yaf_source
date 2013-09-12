@@ -72,12 +72,14 @@ yaf_response_t * yaf_response_instance(yaf_response_t *this_ptr, char *sapi_name
 	zend_class_entry 	*ce;
 	yaf_response_t 		*instance;
 
+	/* 根据运行的sapi来判断属于哪个对象 */
 	if (strncasecmp(sapi_name, "cli", 3)) {
 		ce = yaf_response_http_ce;
 	} else {
 		ce = yaf_response_cli_ce;
 	}
 
+	/* 外部没传入就自己实例化 */
 	if (this_ptr) {
 		instance = this_ptr;
 	} else {
@@ -85,16 +87,17 @@ yaf_response_t * yaf_response_instance(yaf_response_t *this_ptr, char *sapi_name
 		object_init_ex(instance, ce);
 	}
 
+	/* $this->_header = array() */
 	MAKE_STD_ZVAL(header);
 	array_init(header);
 	zend_update_property(ce, instance, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_HEADER), header TSRMLS_CC);
 	zval_ptr_dtor(&header);
-
+	/* $this->_body = array() */
 	MAKE_STD_ZVAL(body);
 	array_init(body);
 	zend_update_property(ce, instance, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), body TSRMLS_CC);
 	zval_ptr_dtor(&body);
-
+	/* return $this; */
 	return instance;
 }
 /* }}} */
@@ -111,11 +114,11 @@ static int yaf_response_set_body(yaf_response_t *response, char *name, int name_
 	}
 
 	response_ce = Z_OBJCE_P(response);
-
+	/* 获取老的$this->_body，并且销毁 */
 	zbody = zend_read_property(response_ce, response, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
 
 	zval_ptr_dtor(&zbody);
-
+	/* 设置新的$this->_body */
 	MAKE_STD_ZVAL(zbody);
 	ZVAL_STRINGL(zbody, body, body_len, 1);
 
@@ -135,32 +138,35 @@ int yaf_response_alter_body(yaf_response_t *response, char *name, int name_len, 
 	if (!body_len) {
 		return 1;
 	}
-
+	/* 获取$this->_body的值 */
 	zbody = zend_read_property(yaf_response_ce, response, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
-
+	/* 没有传name则使用默认的名字为'content' */
 	if (!name) {
 		name = YAF_RESPONSE_PROPERTY_NAME_DEFAULTBODY;
 		name_len = sizeof(YAF_RESPONSE_PROPERTY_NAME_DEFAULTBODY) - 1;
 	}
-
+	/* 以name为key去$this->_body里面查找，查找失败的话则初始化一个空字符串，以name为key存进数组$this->_body里面 */
 	if (zend_hash_find(Z_ARRVAL_P(zbody), name, name_len + 1, (void **)&ppzval) == FAILURE) {
 		zval *body;
 		MAKE_STD_ZVAL(body);
 		ZVAL_EMPTY_STRING(body);
 		zend_hash_update(Z_ARRVAL_P(zbody), name, name_len +1, (void **)&body, sizeof(zval *), (void **)&ppzval);
 	}
-
+	/* 获取ppzval的字符串值 */
 	obody = Z_STRVAL_PP(ppzval);
 
 	switch (flag) {
 		case YAF_RESPONSE_PREPEND:
+			/* 将传递进来的body存到的$this->_body的前面 */
 			Z_STRLEN_PP(ppzval) = spprintf(&Z_STRVAL_PP(ppzval), 0, "%s%s", body, obody);
 			break;
 		case YAF_RESPONSE_APPEND:
+			/* 将传递进来的body存到的$this->_body的后面 */
 			Z_STRLEN_PP(ppzval) = spprintf(&Z_STRVAL_PP(ppzval), 0, "%s%s", obody, body);
 			break;
 		case YAF_RESPONSE_REPLACE:
 		default:
+			/* 将传递进来的body替换原始$this->_body的值 */
 			ZVAL_STRINGL(*ppzval, body, body_len, 1);
 			break;
 	}
@@ -175,8 +181,11 @@ int yaf_response_alter_body(yaf_response_t *response, char *name, int name_len, 
  */
 int yaf_response_clear_body(yaf_response_t *response, char *name, uint name_len TSRMLS_DC) {
 	zval *zbody;
+	/* 获取$this->_body */
 	zbody = zend_read_property(yaf_response_ce, response, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
-
+	/* 	如果传了name则从$this->_body数组中删除以name为key的键值对
+	 *	没有传入的话直接删除整个$this->_body数组中存的值 
+	 */
 	if (name) {
 		zend_hash_del(Z_ARRVAL_P(zbody), name, name_len + 1);
 	} else {
