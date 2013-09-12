@@ -198,6 +198,13 @@ int yaf_response_clear_body(yaf_response_t *response, char *name, uint name_len 
 /** {{{ int yaf_response_set_redirect(yaf_response_t *response, char *url, int len TSRMLS_DC)
  */
 int yaf_response_set_redirect(yaf_response_t *response, char *url, int len TSRMLS_DC) {
+	/*
+	 *	typedef struct {
+	 *		char *line; 	If you allocated this, you need to free it yourself
+     * 		uint line_len;
+	 *  	long response_code; 	long due to zend_parse_parameters compatibility
+	 *	} sapi_header_line;
+	 */
 	sapi_header_line ctr = {0};
 
 	ctr.line_len 		= spprintf(&(ctr.line), 0, "%s %s", "Location:", url);
@@ -215,12 +222,13 @@ int yaf_response_set_redirect(yaf_response_t *response, char *url, int len TSRML
  */
 zval * yaf_response_get_body(yaf_response_t *response, char *name, uint name_len TSRMLS_DC) {
 	zval **ppzval;
+	/* 获取$this->_body */
 	zval *zbody = zend_read_property(yaf_response_ce, response, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
-
+	/* 没传有效的name直接返回全部$this->_body */
 	if (!name) {
 		return zbody;
 	}
-
+	/* 传入有小的name,则从$this->_body数组中查抄响应的值并返回 */
 	if (zend_hash_find(Z_ARRVAL_P(zbody), name, name_len + 1, (void **)&ppzval) == FAILURE) {
 		return NULL;
 	}
