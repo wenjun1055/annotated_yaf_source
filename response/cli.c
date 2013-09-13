@@ -30,9 +30,9 @@ zend_function_entry yaf_response_cli_methods[] = {
 */
 YAF_STARTUP_FUNCTION(response_cli) {
 	zend_class_entry ce;
-
+  
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Response_Cli", "Yaf\\Response\\Cli", yaf_response_cli_methods);
-
+  /* class Yaf_Response_Cli extends Yaf_Response_Abstract */
 	yaf_response_cli_ce = zend_register_internal_class_ex(&ce, yaf_response_ce, NULL TSRMLS_CC);
 
 	return SUCCESS;
