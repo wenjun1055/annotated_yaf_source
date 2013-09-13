@@ -66,6 +66,7 @@ ZEND_END_ARG_INFO()
 #include "response/cli.c"
 
 /** {{{ yaf_response_t * yaf_response_instance(yaf_response_t *this_ptr, char *sapi_name TSRMLS_DC)
+ *	进行一些列初始化，初始化成员变量并且返回类自身的实例
  */
 yaf_response_t * yaf_response_instance(yaf_response_t *this_ptr, char *sapi_name TSRMLS_DC) {
 	zval *header, *body;
@@ -178,6 +179,7 @@ int yaf_response_alter_body(yaf_response_t *response, char *name, int name_len, 
 /* }}} */
 
 /** {{{ int yaf_response_clear_body(yaf_response_t *response, char *name, uint name_len TSRMLS_DC)
+ * 
  */
 int yaf_response_clear_body(yaf_response_t *response, char *name, uint name_len TSRMLS_DC) {
 	zval *zbody;
@@ -209,6 +211,7 @@ int yaf_response_set_redirect(yaf_response_t *response, char *url, int len TSRML
 
 	ctr.line_len 		= spprintf(&(ctr.line), 0, "%s %s", "Location:", url);
 	ctr.response_code 	= 0;
+	/* 通过sapi的header来redirect */
 	if (sapi_header_op(SAPI_HEADER_REPLACE, &ctr TSRMLS_CC) == SUCCESS) {
 		efree(ctr.line);
 		return 1;
@@ -238,13 +241,15 @@ zval * yaf_response_get_body(yaf_response_t *response, char *name, uint name_len
 /* }}} */
 
 /** {{{ int yaf_response_send(yaf_response_t *response TSRMLS_DC)
+ *	输出$this->_body数组中的内容
  */
 int yaf_response_send(yaf_response_t *response TSRMLS_DC) {
 	zval **val;
-
+	/* 获取$this->_body */
 	zval *zbody = zend_read_property(yaf_response_ce, response, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
-
+	/* 重置$this->_body数组内部指针 */
 	zend_hash_internal_pointer_reset(Z_ARRVAL_P(zbody));
+	/* 遍历数组$this->_body并且将每一个值转换成字符串并输出 */
 	while (SUCCESS == zend_hash_get_current_data(Z_ARRVAL_P(zbody), (void**)&val)) {
 		convert_to_string_ex(val);
 		php_write(Z_STRVAL_PP(val), Z_STRLEN_PP(val) TSRMLS_CC);
@@ -258,6 +263,7 @@ int yaf_response_send(yaf_response_t *response TSRMLS_DC) {
 /** {{{ proto private Yaf_Response_Abstract::__construct()
 */
 PHP_METHOD(yaf_response, __construct) {
+	/* 进行一些列的初始化工作，包括给成员变量赋初始值，并且返回类自身的实例 */
 	(void)yaf_response_instance(getThis(), sapi_module.name TSRMLS_CC);
 }
 /* }}} */
@@ -269,7 +275,8 @@ PHP_METHOD(yaf_response, __destruct) {
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::appenBody($body, $name = NULL)
-*/
+ *	往已有的响应body后附加新的内容，添加成功返回$this
+ */
 PHP_METHOD(yaf_response, appendBody) {
 	char		  	*body, *name = NULL;
 	uint			body_len, name_len = 0;
@@ -290,7 +297,8 @@ PHP_METHOD(yaf_response, appendBody) {
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::prependBody($body, $name = NULL)
-*/
+ *	往已有的响应body前插入新的内容，添加成功返回$this
+ */
 PHP_METHOD(yaf_response, prependBody) {
 	char		  	*body, *name = NULL;
 	uint			body_len, name_len = 0;
@@ -339,7 +347,8 @@ PHP_METHOD(yaf_response, clearHeaders) {
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::setRedirect(string $url)
-*/
+ *	重定向请求到新的路径(和Yaf_Controller_Abstract::forward不同, 这个重定向是HTTP 301重定向)
+ */
 PHP_METHOD(yaf_response, setRedirect) {
 	char *url;
 	uint  url_len;
@@ -357,7 +366,8 @@ PHP_METHOD(yaf_response, setRedirect) {
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::setBody($body, $name = NULL)
-*/
+ *	设置响应的Body，设置成功返回$this
+ */
 PHP_METHOD(yaf_response, setBody) {
 	char		  	*body, *name = NULL;
 	uint			body_len, name_len = 0;
@@ -378,7 +388,8 @@ PHP_METHOD(yaf_response, setBody) {
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::clearBody(string $name = NULL)
-*/
+ *	清除已经设置的响应body，清除成功返回$this
+ */
 PHP_METHOD(yaf_response, clearBody) {
 	char *name = NULL;
 	uint name_len = 0;
@@ -405,25 +416,29 @@ PHP_METHOD(yaf_response, getBody) {
 	}
 
 	if (!name) {
+		/* 没有传入name则以默认的name="content"直接获取对应的$this->_body数组中的值 */
 		body = yaf_response_get_body(getThis(), YAF_RESPONSE_PROPERTY_NAME_DEFAULTBODY, sizeof(YAF_RESPONSE_PROPERTY_NAME_DEFAULTBODY) - 1 TSRMLS_CC);
 	} else {
 		if (ZVAL_IS_NULL(name)) {
+			/* 传入的name.type=null的话，返回获取全部的$this->_body数组 */
 			body = yaf_response_get_body(getThis(), NULL, 0 TSRMLS_CC);
 		} else {
+			/* 传入了name先进行类型强制转换为字符串类型，然后再以转换得到的name去$this->_body数组中进行查找得到相应的值 */
 			convert_to_string_ex(&name);
 			body = yaf_response_get_body(getThis(), Z_STRVAL_P(name), Z_STRLEN_P(name) TSRMLS_CC);
 		}
 	}
-
+	/* 经过查找有相应的值的话，则返回值 */
 	if (body) {
 		RETURN_ZVAL(body, 1, 0);
 	}
-
+	/* 没在$this->_body数组中找到值，返回空字符串 */
 	RETURN_EMPTY_STRING();
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Response_Abstract::response(void)
+ *	发送响应给请求端，将$this->_body数组中的值发送给请求端
  */
 PHP_METHOD(yaf_response, response) {
 	RETURN_BOOL(yaf_response_send(getThis() TSRMLS_CC));
@@ -434,9 +449,11 @@ PHP_METHOD(yaf_response, response) {
  */
 PHP_METHOD(yaf_response, __toString) {
 	zval delim;
+	/* 获取$this->_body */
 	zval *zbody = zend_read_property(yaf_response_ce, getThis(), ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), 1 TSRMLS_CC);
-
+	/* 初始化delim为一个空字符串 */
 	ZVAL_EMPTY_STRING(&delim);
+	/* php函数的implode()方法将数组编程一个字符串 */
 	php_implode(&delim, zbody, return_value TSRMLS_CC);
 	zval_dtor(&delim);
 }
@@ -478,8 +495,15 @@ YAF_STARTUP_FUNCTION(response) {
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Response_Abstract", "Yaf\\Response_Abstract", yaf_response_methods);
 
 	yaf_response_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* abstract class Yaf_Response_Abstract */
 	yaf_response_ce->ce_flags |= ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
 
+	/**
+	 *	protected $_header = null;
+	 *	protected $_body = null;
+	 *	protected $_sendheader = false;
+	 *	const DEFAULT_BODY = 'content';
+	 */
 	zend_declare_property_null(yaf_response_ce, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_HEADER), ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_response_ce, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_BODY), ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_bool(yaf_response_ce, ZEND_STRL(YAF_RESPONSE_PROPERTY_NAME_HEADEREXCEPTION), 0, ZEND_ACC_PROTECTED TSRMLS_CC);
