@@ -73,23 +73,30 @@ ZEND_END_ARG_INFO()
 /* }}} */
 
 /** {{{ int yaf_loader_register(TSRMLS_D)
-*/
+ *	利用spl_autoload_register调用类自身的成员方法autoload进行注册 
+ *	spl_autoload_register(array($this, 'autoload'));
+ */
 int yaf_loader_register(yaf_loader_t *loader TSRMLS_DC) {
 	zval *autoload, *method, *function, *ret = NULL;
 	zval **params[1] = {&autoload};
 
+	/* $autoload = array() */
 	MAKE_STD_ZVAL(autoload);
 	array_init(autoload);
-
+	/* $method = 'autoload' */
 	MAKE_STD_ZVAL(method);
 	ZVAL_STRING(method, YAF_AUTOLOAD_FUNC_NAME, 1);
-
+	/* $autoload[] = $loader */
 	zend_hash_next_index_insert(Z_ARRVAL_P(autoload), &loader, sizeof(yaf_loader_t *), NULL);
+	/* $autoload[] = $method */
 	zend_hash_next_index_insert(Z_ARRVAL_P(autoload), &method, sizeof(zval *), NULL);
-
+	/* $function = 'spl_autoload_register' */
 	MAKE_STD_ZVAL(function);
 	ZVAL_STRING(function, YAF_SPL_AUTOLOAD_REGISTER_NAME, 0);
 
+	/**
+	 *	spl_autoload_register(array($this, 'autoload'));
+	 */
 	do {
 		zend_fcall_info fci = {
 			sizeof(fci),
@@ -254,14 +261,16 @@ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int le
 yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, char *global_path TSRMLS_DC) {
 	yaf_loader_t *instance;
 	zval *glibrary, *library;
-
+	/* 获取Yaf_Loader::$_instance */
 	instance = zend_read_static_property(yaf_loader_ce, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_INSTANCE), 1 TSRMLS_CC);
 
 	if (IS_OBJECT == Z_TYPE_P(instance)) {
+		/* 类已经实例化 */
 	/* unecessary since there is no set_router things
 	   && instanceof_function(Z_OBJCE_P(instance), yaf_loader_ce TSRMLS_CC)) {
 	 */
 		if (library_path) {
+			/* 传了本地(自身)类加载路径,则$this->_library = $library */
 			MAKE_STD_ZVAL(library);
 			ZVAL_STRING(library, library_path, 1);
 			zend_update_property(yaf_loader_ce, instance, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), library TSRMLS_CC);
@@ -269,18 +278,20 @@ yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, c
 		}
 
 		if (global_path) {
+			/* 传了全局类加载路径,则$this->_global_library = $glibrary */
 			MAKE_STD_ZVAL(glibrary);
 			ZVAL_STRING(glibrary, global_path, 1);
 			zend_update_property(yaf_loader_ce, instance, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), glibrary TSRMLS_CC);
 			zval_ptr_dtor(&glibrary);
 		}
+		/* return Yaf_Loader::$_instance */
 		return instance;
 	}
-
+	/* 本身类没实例化，并且也没有传入global_path和library_path的话，直接返回NULL */
 	if (!global_path && !library_path) {
 		return NULL;
 	}
-
+	/* 传入了类的实例化则直接使用，没有的话自己实例化 */
 	if (this_ptr) {
 		instance = this_ptr;
 	} else {
@@ -288,6 +299,11 @@ yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, c
 		object_init_ex(instance, yaf_loader_ce);
 	}
 
+	/** 
+	 *	1.传入两个则分别赋值到类的相应的成员变量
+	 *	2.只传入本地类加载路劲则将本地和全局的都赋值为这个值
+	 *	3.只传入全局类加载路劲则将本地和全局的都赋值为这个值
+	 */
 	if (library_path && global_path) {
 		MAKE_STD_ZVAL(glibrary);
 		MAKE_STD_ZVAL(library);
@@ -310,13 +326,13 @@ yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, c
 		zend_update_property(yaf_loader_ce, instance, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), glibrary TSRMLS_CC);
 		zval_ptr_dtor(&glibrary);
 	}
-
+	/* 注册类自身的成员函数autoload为__autoload()函数 */
 	if (!yaf_loader_register(instance TSRMLS_CC)) {
 		return NULL;
 	}
-
+	/* Yaf_Loader::$_instance = $instance */
 	zend_update_static_property(yaf_loader_ce, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_INSTANCE), instance TSRMLS_CC);
-
+	/* return Yaf_Loader::$_instance */
 	return instance;
 }
 /* }}} */
@@ -871,7 +887,8 @@ PHP_METHOD(yaf_loader, autoload) {
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::getInstance($library = NULL, $global_library = NULL)
-*/
+ *	返回类的实例，手册里面写的这里没有参数，但是这里可以传入两个参数
+ */
 PHP_METHOD(yaf_loader, getInstance) {
 	char *library	 	= NULL;
 	char *global	 	= NULL;
@@ -898,6 +915,7 @@ PHP_METHOD(yaf_loader, __destruct) {
 /* }}} */
 
 /** {{{ proto yaf_override_spl_autoload($class_name)
+ *	文档对这个也没介绍，估计是历史遗漏吧
 */
 PHP_FUNCTION(yaf_override_spl_autoload) {
 	php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s is disabled by ap.use_spl_autoload", YAF_SPL_AUTOLOAD_REGISTER_NAME);
@@ -932,8 +950,14 @@ YAF_STARTUP_FUNCTION(loader) {
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Loader",  "Yaf\\Loader", yaf_loader_methods);
 	yaf_loader_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* final class Yaf_Loader */
 	yaf_loader_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/**
+	 *	protected $_library = null;
+	 *	protected $_global_library = null;
+	 *	protected static $_instance = null;
+	 */
 	zend_declare_property_null(yaf_loader_ce, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), 	 ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_loader_ce, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_loader_ce, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_INSTANCE),	 ZEND_ACC_PROTECTED|ZEND_ACC_STATIC TSRMLS_CC);
