@@ -15,6 +15,10 @@
 */
 
 /* $Id: yaf_logo.h 327519 2012-09-07 05:41:25Z laruence $ */
+/**
+ *  这里就是yaf的螃蟹logo，关于下面这些鸟哥的博客早就有说明了
+ *  http://www.laruence.com/2012/08/30/2731.html
+ */
 
 #ifndef YAF_LOGO_H
 #define YAF_LOGO_H
