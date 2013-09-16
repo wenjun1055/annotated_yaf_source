@@ -201,13 +201,13 @@ static int yaf_loader_is_category(char *class, uint class_len, char *category, u
 /* }}} */
 
 /** {{{ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int len TSRMLS_DC)
- *	判断class_name是否为本地类
+ *	判断class_name是否为本地类，穿进去的如果是类名（字符串中带有_或者\\就进行分割，得到前缀），如果不能进行分割则默认认为穿进去的就是前缀
  */
 int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int len TSRMLS_DC) {
 	char *pos, *ns, *prefix = NULL;
 	char orig_char = 0, *backup = NULL;
 	uint prefix_len = 0;
-	/**/
+	/* 判断本地类前缀是否设置，没有的话返回0 */
 	if (!YAF_G(local_namespaces)) {
 		return 0;
 	}
@@ -216,22 +216,32 @@ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int le
 	/* 在类名里面查找下划线 */
 	pos = strstr(class_name, "_");
     if (pos) {
+    	/* 前缀长度 */
 		prefix_len 	= pos - class_name;
+		/* 将类名设置为前缀 */
 		prefix 		= class_name;
+		/* 类名加前缀长度后的字符串应该是真实的类的名称 */
 		backup = class_name + prefix_len;
 		orig_char = '_';
+		/* 在backup当前位置加上\0，让它成为一个真正的字符串 */
 		*backup = '\0';
 	}
 #ifdef YAF_HAVE_NAMESPACE
+	/* 设置了命名空间的话，则使用\\进行查找 */
 	else if ((pos = strstr(class_name, "\\"))) {
+		/* 前缀长度 */
 		prefix_len 	= pos - class_name;
+		/* 前缀对类名进行长度截取获得前缀 */
 		prefix 		= estrndup(class_name, prefix_len);
 		orig_char = '\\';
+		/* 类名加前缀长度后的字符串应该是真实的类的名称 */
 		backup = class_name + prefix_len;
+		/* 在backup当前位置加上\0，让它成为一个真正的字符串 */
 		*backup = '\0';
 	}
 #endif
 	else {
+		/* 不符合上面的两个的话则认为传进来的直接就是前缀，所以不进行任何截取工作 */
 		prefix = class_name;
 		prefix_len = len;
 	}
@@ -239,7 +249,10 @@ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int le
 	if (!prefix) {
 		return 0;
 	}
-
+	/** 
+	 *	在YAF_G(local_namespaces)中进行prefix字符串的查找
+	 *	eg:	:Foo:Bar:
+	 */
 	while ((pos = strstr(ns, prefix))) {
 		if ((pos == ns) && (*(pos + prefix_len) == DEFAULT_DIR_SEPARATOR || *(pos + prefix_len) == '\0')) {
 			if (backup) {
@@ -641,6 +654,7 @@ PHP_METHOD(yaf_loader, isLocalName) {
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::setLibraryPath(string $path, $global = FALSE)
+ *	设置类库地址
 */
 PHP_METHOD(yaf_loader, setLibraryPath) {
 	char *library;
@@ -652,16 +666,19 @@ PHP_METHOD(yaf_loader, setLibraryPath) {
 	}
 
 	if (!global) {
+		/* 设置成本地类库 */
 		zend_update_property_stringl(yaf_loader_ce, getThis(), ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), library, len TSRMLS_CC);
 	} else {
+		/* 设置成全局类库 */
 		zend_update_property_stringl(yaf_loader_ce, getThis(), ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), library, len TSRMLS_CC);
 	}
-
+	/* return $this */
 	RETURN_ZVAL(getThis(), 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::getLibraryPath($global = FALSE)
+ *	获取类库地址
 */
 PHP_METHOD(yaf_loader, getLibraryPath) {
 	zval *library;
@@ -672,8 +689,10 @@ PHP_METHOD(yaf_loader, getLibraryPath) {
 	}
 
 	if (!global) {
+		/* 获取本地类库地址 */		
 		library = zend_read_property(yaf_loader_ce, getThis(), ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), 1 TSRMLS_CC);
 	} else {
+		/* 获取全局类库地址 */	
 		library = zend_read_property(yaf_loader_ce, getThis(), ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), 1 TSRMLS_CC);
 	}
 

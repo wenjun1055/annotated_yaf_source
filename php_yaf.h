@@ -85,9 +85,9 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	char		*base_uri;
 	char 		*environ;                   //环境名称, 当用INI作为Yaf的配置文件时, 这个指明了Yaf将要在INI配置中读取的节的名字
 	char 		*directory;
-	char 		*local_library;
-	char        *local_namespaces;
-	char 		*global_library;
+	char 		*local_library;             //本地类库      
+	char        *local_namespaces;          //本地类前缀(字符串形式，类似：:Foo:Bar:)
+	char 		*global_library;            //全局类库
 	char        *view_directory;
 	char 		*view_ext;                  //视图文件后缀
 	char 		*default_module;
