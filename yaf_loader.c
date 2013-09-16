@@ -278,6 +278,7 @@ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int le
 /* }}} */
 
 /** {{{ yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, char *global_path TSRMLS_DC)
+ *	进行类自身成员变量和信息的初始化，并返回类的实例
  */
 yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, char *global_path TSRMLS_DC) {
 	yaf_loader_t *instance;
