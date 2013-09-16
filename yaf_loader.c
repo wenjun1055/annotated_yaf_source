@@ -359,6 +359,7 @@ yaf_loader_t * yaf_loader_instance(yaf_loader_t *this_ptr, char *library_path, c
 /* }}} */
 
 /** {{{ int yaf_loader_import(char *path, int len, int use_path TSRMLS_DC)
+ *	整个功能就是对文件的判断，包含，解析以及执行过程
 */
 int yaf_loader_import(char *path, int len, int use_path TSRMLS_DC) {
 	zend_file_handle file_handle;
@@ -368,29 +369,30 @@ int yaf_loader_import(char *path, int len, int use_path TSRMLS_DC) {
 	if (!VCWD_REALPATH(path, realpath)) {
 		return 0;
 	}
-
+	/* 组装文件信息结构体 */
 	file_handle.filename = path;
 	file_handle.free_filename = 0;
 	file_handle.type = ZEND_HANDLE_FILENAME;
 	file_handle.opened_path = NULL;
 	file_handle.handle.fp = NULL;
-
+	/* 解析文件获得字节码 */
 	op_array = zend_compile_file(&file_handle, ZEND_INCLUDE TSRMLS_CC);
-
+	/* 解析成功 */
 	if (op_array && file_handle.handle.stream.handle) {
 		int dummy = 1;
-
+		/* 设置打开文件的绝对路劲 */
 		if (!file_handle.opened_path) {
 			file_handle.opened_path = path;
 		}
-
+		/* 往EG(included_files)添加以文件绝对路劲为key，1为value的键值对，标志文件已经被包含进来 */
 		zend_hash_add(&EG(included_files), file_handle.opened_path, strlen(file_handle.opened_path)+1, (void *)&dummy, sizeof(int), NULL);
 	}
+	/* 销毁打开的文件句柄 */
 	zend_destroy_file_handle(&file_handle TSRMLS_CC);
 
 	if (op_array) {
 		zval *result = NULL;
-
+		/* 取出EG里面的一些旧值，操作过程在yaf_loader.h */
 		YAF_STORE_EG_ENVIRON();
 
 		EG(return_value_ptr_ptr) = &result;
@@ -401,15 +403,18 @@ int yaf_loader_import(char *path, int len, int use_path TSRMLS_DC) {
 			zend_rebuild_symbol_table(TSRMLS_C);
 		}
 #endif
+		/* 执行op_code */
 		zend_execute(op_array TSRMLS_CC);
-
+		/* 执行完毕，销毁op_code数组 */
 		destroy_op_array(op_array TSRMLS_CC);
+		/* 释放内存 */
 		efree(op_array);
-		if (!EG(exception)) {
+		if (!EG(exception)) {	/* 没有异常 */
 			if (EG(return_value_ptr_ptr) && *EG(return_value_ptr_ptr)) {
 				zval_ptr_dtor(EG(return_value_ptr_ptr));
 			}
 		}
+		/* 将新值放入EG */
 		YAF_RESTORE_EG_ENVIRON();
 	    return 1;
 	}
@@ -701,6 +706,7 @@ PHP_METHOD(yaf_loader, getLibraryPath) {
 /* }}} */
 
 /** {{{ proto public static Yaf_Loader::import($file)
+ *	导入一个PHP文件, 因为Yaf_Loader::import只是专注于一次包含, 所以要比传统的require_once性能好一些
 */
 PHP_METHOD(yaf_loader, import) {
 	char *file;
@@ -711,35 +717,42 @@ PHP_METHOD(yaf_loader, import) {
 	}
 
 	if (!len) {
+		/* 没传name返回false */
 		RETURN_FALSE;
 	} else {
 		int  retval = 0;
 
 		if (!IS_ABSOLUTE_PATH(file, len)) {
-			yaf_loader_t *loader = yaf_loader_instance(NULL, NULL, NULL TSRMLS_CC);
+			/* 不是据对路径 */
+
+			yaf_loader_t *loader = yaf_loader_instance(NULL, NULL, NULL TSRMLS_CC);		/* 获取类的实例 */
 			if (!loader) {
+				/* 获取不到报错 */
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s need to be initialize first", yaf_loader_ce->name);
 				RETURN_FALSE;
 			} else {
+				/* 获取本地类库 */
 				zval *library = zend_read_property(yaf_loader_ce, loader, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), 1 TSRMLS_CC);
+				/* 利用本地类库为传递进来的相对路径拼出绝对路径 */
 				len = spprintf(&file, 0, "%s%c%s", Z_STRVAL_P(library), DEFAULT_SLASH, file);
 				need_free = 1;
 			}
 		}
-
+		/* 判断EG(included_files)中是否已经存了文件名 */
 		retval = (zend_hash_exists(&EG(included_files), file, len + 1));
+		/* 如果已经存了，释放保存文件名的内存，返回true */
 		if (retval) {
 			if (need_free) {
 				efree(file);
 			}
 			RETURN_TRUE;
 		}
-
+		/* 加载文件，释放保存文件名的字符串内存 */
 		retval = yaf_loader_import(file, len, 0 TSRMLS_CC);
 		if (need_free) {
 			efree(file);
 		}
-
+		/* 加载成功返回true,加载失败返回false */
 		RETURN_BOOL(retval);
 	}
 }
