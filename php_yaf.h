@@ -81,27 +81,27 @@ extern PHPAPI void php_var_dump(zval **struc, int level TSRMLS_DC);
 extern PHPAPI void php_debug_zval_dump(zval **struc, int level TSRMLS_DC);
 
 ZEND_BEGIN_MODULE_GLOBALS(yaf)
-	char 		*ext;                   //脚本后缀
+	char 		*ext;                       //脚本后缀
 	char		*base_uri;
-	char 		*environ;
+	char 		*environ;                   //环境名称, 当用INI作为Yaf的配置文件时, 这个指明了Yaf将要在INI配置中读取的节的名字
 	char 		*directory;
 	char 		*local_library;
 	char        *local_namespaces;
 	char 		*global_library;
 	char        *view_directory;
-	char 		*view_ext;
+	char 		*view_ext;                  //视图文件后缀
 	char 		*default_module;
 	char 		*default_controller;
 	char 		*default_action;
 	char 		*bootstrap;
-	char 		*name_separator;
-	long 		name_separator_len;
+	char 		*name_separator;            //类名分隔符
+	long 		name_separator_len;         //类名分隔符长度
 	zend_bool 	lowcase_path;
 	zend_bool 	use_spl_autoload;
 	zend_bool 	throw_exception;
 	zend_bool 	cache_config;               //缓存标识
 	zend_bool   action_prefer;
-	zend_bool	name_suffix;
+	zend_bool	name_suffix;                 //在处理Controller, Action, Plugin, Model的时候, 类名中关键信息是否是后缀式,比如UserModel, 而在前缀模式下则是ModelUser
 	zend_bool  	autoload_started;
 	zend_bool  	running;
 	zend_bool  	in_exception;

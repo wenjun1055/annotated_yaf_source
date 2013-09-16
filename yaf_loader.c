@@ -171,18 +171,25 @@ int yaf_loader_register(yaf_loader_t *loader TSRMLS_DC) {
 /* }}} */
 
 /** {{{ static int yaf_loader_is_category(char *class, uint class_len, char *category, uint category_len TSRMLS_DC)
+ *	这里是根据类名以及所属的目录名，以及yaf配置的前缀或者后缀形式，以及分隔符检查类名是否正确
+ *	eg:CategoryModel或者Model_Category形式
  */
 static int yaf_loader_is_category(char *class, uint class_len, char *category, uint category_len TSRMLS_DC) {
+	/* 分隔符长度 */
 	uint separator_len = YAF_G(name_separator_len);
-
+	/* 判断类名前后缀 */
 	if (YAF_G(name_suffix)) {
+		/* 后缀形式 */
 		if (class_len > category_len && strncmp(class + class_len - category_len, category, category_len) == 0) {
+			/* 没有分隔符或者分隔符所在位置正确就返回1 */
 			if (!separator_len || strncmp(class + class_len - category_len - separator_len, YAF_G(name_separator), separator_len) == 0) {
 				return 1;
 			}
 		}
 	} else {
+		/* 前缀形式 */
 		if (strncmp(class, category, category_len) == 0) {
+			/* 没有分隔符或者分隔符所在位置正确就返回1 */
 			if (!separator_len || strncmp(class + category_len, YAF_G(name_separator), separator_len) == 0) {
 				return 1;
 			}
@@ -194,18 +201,19 @@ static int yaf_loader_is_category(char *class, uint class_len, char *category, u
 /* }}} */
 
 /** {{{ int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int len TSRMLS_DC)
+ *	判断class_name是否为本地类
  */
 int yaf_loader_is_local_namespace(yaf_loader_t *loader, char *class_name, int len TSRMLS_DC) {
 	char *pos, *ns, *prefix = NULL;
 	char orig_char = 0, *backup = NULL;
 	uint prefix_len = 0;
-
+	/**/
 	if (!YAF_G(local_namespaces)) {
 		return 0;
 	}
 
 	ns	= YAF_G(local_namespaces);
-
+	/* 在类名里面查找下划线 */
 	pos = strstr(class_name, "_");
     if (pos) {
 		prefix_len 	= pos - class_name;
@@ -490,14 +498,22 @@ int yaf_internal_autoload(char *file_name, uint name_len, char **directory TSRML
 /* }}} */
 
 /** {{{ int yaf_loader_register_namespace_single(char *prefix, uint len TSRMLS_DC)
+ *	注册单个本地类前缀
  */
 int yaf_loader_register_namespace_single(char *prefix, uint len TSRMLS_DC) {
 
 	if (YAF_G(local_namespaces)) {
+		/* 已经有值或者初始化 */
+
 		uint orig_len = strlen(YAF_G(local_namespaces));
+		/** 
+		 *	重新申请内存，并将prefix接在后面
+		 *	形式:$local_namespaces . DEFAULT_DIR_SEPARATOR . prefix
+		 */
 		YAF_G(local_namespaces) = erealloc(YAF_G(local_namespaces), orig_len + 1 + len + 1);
 		snprintf(YAF_G(local_namespaces) + orig_len, len + 2, "%c%s", DEFAULT_DIR_SEPARATOR, prefix);
 	} else {
+		/* 未初始化，直接申请内存，将前缀的字符串值直接格式化后复制给YAF_G(local_namespaces) */
 		YAF_G(local_namespaces) = emalloc(len + 1 + 1);
 		snprintf(YAF_G(local_namespaces), len + 2, "%s", prefix);
 	}
@@ -507,12 +523,14 @@ int yaf_loader_register_namespace_single(char *prefix, uint len TSRMLS_DC) {
 /* }}} */
 
 /** {{{ int yaf_loader_register_namespace_multi(zval *prefixes TSRMLS_DC)
+ *	设置多个本地类前缀
  */
 int yaf_loader_register_namespace_multi(zval *prefixes TSRMLS_DC) {
 	zval **ppzval;
 	HashTable *ht;
-
+	/* 传进来的是一个数组 */
 	ht = Z_ARRVAL_P(prefixes);
+	/* 遍历获取数组里面存的每一个前缀，利用yaf_loader_register_namespace_single一个个注册 */
 	for(zend_hash_internal_pointer_reset(ht);
 			zend_hash_has_more_elements(ht) == SUCCESS;
 			zend_hash_move_forward(ht)) {
@@ -561,14 +579,19 @@ PHP_METHOD(yaf_loader, registerLocalNamespace) {
 	}
 
 	if (IS_STRING == Z_TYPE_P(namespaces)) {
+		/* 传进来的变量类型为字符串则注册单个类前缀 */
 		if (yaf_loader_register_namespace_single(Z_STRVAL_P(namespaces), Z_STRLEN_P(namespaces) TSRMLS_CC)) {
+			/* return $this */
 			RETURN_ZVAL(getThis(), 1, 0);
 		}
 	} else if (IS_ARRAY == Z_TYPE_P(namespaces)) {
+		/* 传进来的变量类型为数组则注册多个类前缀 */
 		if(yaf_loader_register_namespace_multi(namespaces TSRMLS_CC)) {
+			/* return $this */
 			RETURN_ZVAL(getThis(), 1, 0);
 		}
 	} else {
+		/* 其他类型直接报错 */
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid parameters provided, must be a string, or an array");
 	}
 
@@ -577,6 +600,7 @@ PHP_METHOD(yaf_loader, registerLocalNamespace) {
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::getLocalNamespace(void)
+ *	获取当前已经注册的本地类前缀
 */
 PHP_METHOD(yaf_loader, getLocalNamespace) {
 	if (YAF_G(local_namespaces)) {
@@ -587,8 +611,10 @@ PHP_METHOD(yaf_loader, getLocalNamespace) {
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::clearLocalNamespace(void)
+ *	清除已注册的本地类前缀
 */
 PHP_METHOD(yaf_loader, clearLocalNamespace) {
+	/* 释放YAF_G(local_namespaces) */
 	efree(YAF_G(local_namespaces));
 	YAF_G(local_namespaces) = NULL;
 
@@ -597,6 +623,7 @@ PHP_METHOD(yaf_loader, clearLocalNamespace) {
 /* }}} */
 
 /** {{{ proto public Yaf_Loader::isLocalName(string $class_name)
+ *	判断一个类, 是否是本地类.
 */
 PHP_METHOD(yaf_loader, isLocalName) {
 	zval *name;
@@ -604,7 +631,7 @@ PHP_METHOD(yaf_loader, isLocalName) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &name) == FAILURE) {
 		return;
 	}
-
+	/* 变量类型不是字符串，返回false */
 	if (Z_TYPE_P(name) != IS_STRING) {
 		RETURN_FALSE;
 	}
@@ -721,6 +748,7 @@ PHP_METHOD(yaf_loader, autoload) {
 			break;
 		}
 #ifdef YAF_HAVE_NAMESPACE
+		/* 使用的是namespace的话，这里做的工作就是将类名里面的\\转换成下划线_ */
 		{
 			int pos = 0;
 			origin_lcname = estrndup(class_name, class_name_len);
@@ -733,7 +761,7 @@ PHP_METHOD(yaf_loader, autoload) {
 			}
 		}
 #endif
-
+		/* 用户定义的类名不能使用Yaf_开头 */
 		if (strncmp(class_name, YAF_LOADER_RESERVERD, YAF_LOADER_LEN_RESERVERD) == 0) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "You should not use '%s' as class name prefix", YAF_LOADER_RESERVERD);
 		}
