@@ -82,25 +82,25 @@ extern PHPAPI void php_debug_zval_dump(zval **struc, int level TSRMLS_DC);
 
 ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	char 		*ext;                       //脚本后缀
-	char		*base_uri;
+	char		*base_uri;                  //base_uri
 	char 		*environ;                   //环境名称, 当用INI作为Yaf的配置文件时, 这个指明了Yaf将要在INI配置中读取的节的名字
-	char 		*directory;
+	char 		*directory;                 //application目录路径
 	char 		*local_library;             //本地类库      
 	char        *local_namespaces;          //本地类前缀(字符串形式，类似：:Foo:Bar:)
 	char 		*global_library;            //全局类库
-	char        *view_directory;
+	char        *view_directory;            //视图文件目录路径
 	char 		*view_ext;                  //视图文件后缀
-	char 		*default_module;
-	char 		*default_controller;
-	char 		*default_action;
+	char 		*default_module;            //默认module
+	char 		*default_controller;        //默认controller
+	char 		*default_action;            //默认action
 	char 		*bootstrap;
 	char 		*name_separator;            //类名分隔符
 	long 		name_separator_len;         //类名分隔符长度
-	zend_bool 	lowcase_path;
-	zend_bool 	use_spl_autoload;
+	zend_bool 	lowcase_path;               //开启的情况下，路径信息中的目录部分都会被转换成小写
+	zend_bool 	use_spl_autoload;           //开启的情况下，Yaf在加载不成功的情况下，会继续让PHP的自动加载函数加载，从性能考虑，除非特殊情况，否则保持这个选项关闭
 	zend_bool 	throw_exception;
-	zend_bool 	cache_config;               //缓存标识
-	zend_bool   action_prefer;
+	zend_bool 	cache_config;               //是否缓存配置文件(只针对INI配置文件生效)，打开此选项可在复杂配置的情况下提高性能
+	zend_bool   action_prefer;              //当PATH_INFO只有一部分的时候，将其作为controller还是action，配置打开则为action
 	zend_bool	name_suffix;                 //在处理Controller, Action, Plugin, Model的时候, 类名中关键信息是否是后缀式,比如UserModel, 而在前缀模式下则是ModelUser
 	zend_bool  	autoload_started;
 	zend_bool  	running;
@@ -108,9 +108,9 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	zend_bool  	catch_exception;
 	zend_bool   suppressing_warning;
 /* {{{ This only effects internally */
-	zend_bool  	st_compatible;
+	zend_bool  	st_compatible;             //打开后到model下找相关Dao和Service
 /* }}} */
-	long		forward_limit;
+	long		forward_limit;           //forward最大嵌套深度
 	HashTable	*configs;                //配置缓存
 	zval 		*modules;
 	zval        *default_route;
@@ -123,7 +123,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	zval        *ini_wanted_section;
 	uint        parsing_flag;          //配置文件解析进度标识
 #ifdef YAF_HAVE_NAMESPACE
-	zend_bool	use_namespace;
+	zend_bool	use_namespace;           //开启的情况下, Yaf将会使用命名空间方式注册自己的类, 比如Yaf_Application将会变成Yaf\Application
 #endif
 ZEND_END_MODULE_GLOBALS(yaf)
 

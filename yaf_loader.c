@@ -425,19 +425,24 @@ int yaf_loader_import(char *path, int len, int use_path TSRMLS_DC) {
 /* }}} */
 
 /** {{{ int yaf_internal_autoload(char * file_name, uint name_len, char **directory TSRMLS_DC)
+ *	接收文件名和文件所在文件夹路径，拼装出完整文件的路径，然后对文件是否存在的判断，包含，解析以及执行过程
  */
 int yaf_internal_autoload(char *file_name, uint name_len, char **directory TSRMLS_DC) {
 	zval *library_dir, *global_dir;
 	char *q, *p, *seg;
 	uint seg_len, directory_len, status;
-	char *ext = YAF_G(ext);
+	char *ext = YAF_G(ext);		//文件后缀
 	smart_str buf = {0};
 
+	/** 
+	 *	1.没传路径则说明是library，通过类名判断是本地类还是全局类，在获取响应的类路径
+	 *	2.传了的话则直接使用路径	
+	 */
 	if (NULL == *directory) {
 		char *library_path;
 		uint  library_path_len;
 		yaf_loader_t *loader;
-
+		/* 获取类自身的实例 */
 		loader = yaf_loader_instance(NULL, NULL, NULL TSRMLS_CC);
 
 		if (!loader) {
@@ -445,23 +450,27 @@ int yaf_internal_autoload(char *file_name, uint name_len, char **directory TSRML
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s need to be initialize first", yaf_loader_ce->name);
 			return 0;
 		} else {
+			/* $library_dir = $this->_library */
 			library_dir = zend_read_property(yaf_loader_ce, loader, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_LIBRARY), 1 TSRMLS_CC);
+			/* $global_dir = $this->_global_library */
 			global_dir	= zend_read_property(yaf_loader_ce, loader, ZEND_STRL(YAF_LOADER_PROPERTY_NAME_GLOBAL_LIB), 1 TSRMLS_CC);
 
 			if (yaf_loader_is_local_namespace(loader, file_name, name_len TSRMLS_CC)) {
+				/* 讲过判断，file_name是本地类，设置类路径为本地类路径 */
 				library_path = Z_STRVAL_P(library_dir);
 				library_path_len = Z_STRLEN_P(library_dir);
 			} else {
+				/* 讲过判断，file_name是全局类，设置类路径为全局类路径 */
 				library_path = Z_STRVAL_P(global_dir);
 				library_path_len = Z_STRLEN_P(global_dir);
 			}
 		}
-
+		/* 报错 */
 		if (NULL == library_path) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s requires %s(which set the library_directory) to be initialized first", yaf_loader_ce->name, yaf_application_ce->name);
 			return 0;
 		}
-
+		/* 将path添加到buf结构体中 */
 		smart_str_appendl(&buf, library_path, library_path_len);
 	} else {
 		smart_str_appendl(&buf, *directory, strlen(*directory));
@@ -477,9 +486,11 @@ int yaf_internal_autoload(char *file_name, uint name_len, char **directory TSRML
 	q = p;
 
 	while (1) {
+		/* 内部移动指针，当移到_或者结束的时候执行下面的操作 */
 		while(++q && *q != '_' && *q != '\0');
 
 		if (*q != '\0') {
+			/* 遇到下划线就截取拼接 */
 			seg_len	= q - p;
 			seg	 	= estrndup(p, seg_len);
 			smart_str_appendl(&buf, seg, seg_len);
@@ -495,20 +506,21 @@ int yaf_internal_autoload(char *file_name, uint name_len, char **directory TSRML
 		/* all path of library is lowercase */
 		zend_str_tolower(buf.c + directory_len, buf.len - directory_len);
 	}
-
+	/* 拿文件名最后一段，加上后缀拼装成完整文件名 */
 	smart_str_appendl(&buf, p, strlen(p));
 	smart_str_appendc(&buf, '.');
 	smart_str_appendl(&buf, ext, strlen(ext));
-
+	/* 添加字符串结束标识“\0” */
 	smart_str_0(&buf);
 
 	if (directory) {
+		/* 复制文件完整路径 */
 		*(directory) = estrndup(buf.c, buf.len);
 	}
-
+	/* 引入并执行文件 */
 	status = yaf_loader_import(buf.c, buf.len, 0 TSRMLS_CC);
 	smart_str_free(&buf);
-
+	/* 根据引入执行的情况返回值 */
 	if (!status)
 	   	return 0;
 
@@ -772,12 +784,13 @@ PHP_METHOD(yaf_loader, autoload) {
 		return;
 	}
 
-	separator_len = YAF_G(name_separator_len);
-	app_directory = YAF_G(directory);
+	separator_len = YAF_G(name_separator_len);		/* 类名分隔符长度 */
+	app_directory = YAF_G(directory);				/* application.directory = APPLICATION_PATH */			
 	origin_classname = class_name;
 
 	do {
 		if (!class_name_len) {
+			/* 1.类名长度为0，跳出do while */
 			break;
 		}
 #ifdef YAF_HAVE_NAMESPACE
@@ -794,16 +807,17 @@ PHP_METHOD(yaf_loader, autoload) {
 			}
 		}
 #endif
-		/* 用户定义的类名不能使用Yaf_开头 */
+		/* 2.用户定义的类名不能使用Yaf_开头 */
 		if (strncmp(class_name, YAF_LOADER_RESERVERD, YAF_LOADER_LEN_RESERVERD) == 0) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "You should not use '%s' as class name prefix", YAF_LOADER_RESERVERD);
 		}
-
+		/* 3.检查传进来的类名是不是符合model的命名 */
 		if (yaf_loader_is_category(class_name, class_name_len, YAF_LOADER_MODEL, YAF_LOADER_LEN_MODEL TSRMLS_CC)) {
 			/* this is a model class */
+			/* $directory = APPLICATION_PATH . '/models' */
 			spprintf(&directory, 0, "%s/%s", app_directory, YAF_MODEL_DIRECTORY_NAME);
 			file_name_len = class_name_len - separator_len - YAF_LOADER_LEN_MODEL;
-
+			/* 通过判断是前缀还是后缀来获取文件名 */
 			if (YAF_G(name_suffix)) {
 				file_name = estrndup(class_name, file_name_len);
 			} else {
@@ -812,12 +826,13 @@ PHP_METHOD(yaf_loader, autoload) {
 
 			break;
 		}
-
+		/* 4.检查传进来的类名是不是符合plugin的命名 */
 		if (yaf_loader_is_category(class_name, class_name_len, YAF_LOADER_PLUGIN, YAF_LOADER_LEN_PLUGIN TSRMLS_CC)) {
 			/* this is a plugin class */
+			/* $directory = APPLICATION_PATH . '/plugins' */
 			spprintf(&directory, 0, "%s/%s", app_directory, YAF_PLUGIN_DIRECTORY_NAME);
 			file_name_len = class_name_len - separator_len - YAF_LOADER_LEN_PLUGIN;
-
+			/* 通过判断是前缀还是后缀来获取文件名 */
 			if (YAF_G(name_suffix)) {
 				file_name = estrndup(class_name, file_name_len);
 			} else {
@@ -826,12 +841,13 @@ PHP_METHOD(yaf_loader, autoload) {
 
 			break;
 		}
-
+		/* 4.检查传进来的类名是不是符合controller的命名 */
 		if (yaf_loader_is_category(class_name, class_name_len, YAF_LOADER_CONTROLLER, YAF_LOADER_LEN_CONTROLLER TSRMLS_CC)) {
 			/* this is a controller class */
+			/* $directory = APPLICATION_PATH . '/controllers' */
 			spprintf(&directory, 0, "%s/%s", app_directory, YAF_CONTROLLER_DIRECTORY_NAME);
 			file_name_len = class_name_len - separator_len - YAF_LOADER_LEN_CONTROLLER;
-
+			/* 通过判断是前缀还是后缀来获取文件名 */
 			if (YAF_G(name_suffix)) {
 				file_name = estrndup(class_name, file_name_len);
 			} else {
@@ -843,9 +859,11 @@ PHP_METHOD(yaf_loader, autoload) {
 
 
 /* {{{ This only effects internally */
+		/* 5.兼容模式下去model文件夹中加载Dao或者Service */
 		if (YAF_G(st_compatible) && (strncmp(class_name, YAF_LOADER_DAO, YAF_LOADER_LEN_DAO) == 0
 					|| strncmp(class_name, YAF_LOADER_SERVICE, YAF_LOADER_LEN_SERVICE) == 0)) {
 			/* this is a model class */
+			/* $directory = APPLICATION_PATH . '/models' */
 			spprintf(&directory, 0, "%s/%s", app_directory, YAF_MODEL_DIRECTORY_NAME);
 		}
 /* }}} */
@@ -854,7 +872,7 @@ PHP_METHOD(yaf_loader, autoload) {
 		file_name     = class_name;
 
 	} while(0);
-
+	/* application路径没设置并且存在文件路径，说明没有进行application的run的初始化操作，释放各种资源，最后报错 */
 	if (!app_directory && directory) {
 		efree(directory);
 #ifdef YAF_HAVE_NAMESPACE
@@ -871,11 +889,22 @@ PHP_METHOD(yaf_loader, autoload) {
 		RETURN_FALSE;
 	}
 
+	/**
+	 *	Why:	
+	 *		yaf.use_spl_autoload  开启的情况下, Yaf在加载不成功的情况下, 会继续让PHP的自动加载函数加载, 从性能考虑, 除非特殊情况, 否则保持这个选项关闭
+	 *	Q:但是从下面的代码中根本就没体现出来呢
+	 */
 	if (!YAF_G(use_spl_autoload)) {
+		/* use_spl_autoload关闭，使用yaf_internal_autoload进行加载文件 */
+
 		/** directory might be NULL since we passed a NULL */
 		if (yaf_internal_autoload(file_name, file_name_len, &directory TSRMLS_CC)) {
-			char *lc_classname = zend_str_tolower_dup(origin_classname, class_name_len);
+			/* 文件加载执行成功，进行加载成功判断，再进行扫尾工作，返回true或者false */
+
+			char *lc_classname = zend_str_tolower_dup(origin_classname, class_name_len);	/* 将类名转换成小写模式 */
+			/* 类加载的hashTable EG(class_table) 中查找是否有加载的类名 */
 			if (zend_hash_exists(EG(class_table), lc_classname, class_name_len + 1)) {
+				/* 加载成功，进行扫尾工作，返回true */
 #ifdef YAF_HAVE_NAMESPACE
 				if (origin_lcname) {
 					efree(origin_lcname);
@@ -892,10 +921,12 @@ PHP_METHOD(yaf_loader, autoload) {
 				efree(lc_classname);
 				RETURN_TRUE;
 			} else {
+				/* EG(class_table)不存在类名报错 */
 				efree(lc_classname);
 				php_error_docref(NULL TSRMLS_CC, E_STRICT, "Could not find class %s in %s", class_name, directory);
 			}
 		}  else {
+			/* 加载失败报错 */
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed opening script %s: %s", directory, strerror(errno));
 		}
 
@@ -912,9 +943,9 @@ PHP_METHOD(yaf_loader, autoload) {
 		}
 		RETURN_TRUE;
 	} else {
-		char *lower_case_name = zend_str_tolower_dup(origin_classname, class_name_len);
-		if (yaf_internal_autoload(file_name, file_name_len, &directory TSRMLS_CC) &&
-				zend_hash_exists(EG(class_table), lower_case_name, class_name_len + 1)) {
+		char *lower_case_name = zend_str_tolower_dup(origin_classname, class_name_len);			/* 将类名转换成小写模式 */
+		if (yaf_internal_autoload(file_name, file_name_len, &directory TSRMLS_CC) &&			/* 再次执行文件加载 */
+				zend_hash_exists(EG(class_table), lower_case_name, class_name_len + 1)) {		/*类加载的hashTable EG(class_table) 中查找是否有加载的类名 */
 #ifdef YAF_HAVE_NAMESPACE
 			if (origin_lcname) {
 				efree(origin_lcname);
