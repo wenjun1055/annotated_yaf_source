@@ -113,7 +113,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	long		forward_limit;           //forward最大嵌套深度
 	HashTable	*configs;                //配置缓存
 	zval 		*modules;
-	zval        *default_route;
+	zval        *default_route;            //默认路由
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION < 4))
 	uint 		buf_nesting;
 	void		*buffer;
