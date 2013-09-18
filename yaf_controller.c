@@ -85,11 +85,13 @@ zval * yaf_controller_render(yaf_controller_t *instance, char *action_name, int 
 	int 	path_len;
 	yaf_view_t *view;
 	zend_class_entry *view_ce;
-
+	/* 获取$this->_view */
 	view   	  = zend_read_property(yaf_controller_ce, instance, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), 0 TSRMLS_CC);
+	/* 获取$this->_name */
 	name	  = zend_read_property(yaf_controller_ce, instance, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_NAME), 0 TSRMLS_CC);
-	view_ext  = YAF_G(view_ext);
-
+	/* 模板文件的后缀 */
+	view_ext  = YAF_G(view_ext);	
+	/* 将$this->_name转为小写 */
 	self_name = zend_str_tolower_dup(Z_STRVAL_P(name), Z_STRLEN_P(name));
 
 	tmp = self_name;
@@ -99,7 +101,7 @@ zval * yaf_controller_render(yaf_controller_t *instance, char *action_name, int 
 		}
 		tmp++;
 	}
-
+	/* 复制action_name */
 	action_name = estrndup(action_name, len);
 
 	tmp = action_name;
@@ -109,15 +111,15 @@ zval * yaf_controller_render(yaf_controller_t *instance, char *action_name, int 
 		}
 		tmp++;
 	}
-
+	/* $path = "index/index.phtml" */
 	path_len  = spprintf(&path, 0, "%s%c%s.%s", self_name, DEFAULT_SLASH, action_name, view_ext);
 
 	efree(self_name);
 	efree(action_name);
-
+	/* $param = $path; */
 	MAKE_STD_ZVAL(param);
 	ZVAL_STRINGL(param, path, path_len, 0);
-
+	/* 调用Yaf_View_*的成员方法render进行渲染,并将渲染后的结果赋值给ret返回 */
 	view_ce = Z_OBJCE_P(view);
 	if (var_array) {
 		zend_call_method_with_2_params(&view, view_ce, NULL, "render", &ret, param, var_array);
@@ -140,7 +142,7 @@ zval * yaf_controller_render(yaf_controller_t *instance, char *action_name, int 
 		zval_ptr_dtor(&ret);
 		return NULL;
 	}
-
+	/* 结果不为false,返回渲染后的内容 */
 	return ret;
 }
 /* }}} */
@@ -152,11 +154,13 @@ int yaf_controller_display(yaf_controller_t *instance, char *action_name, int le
 	zval *name, *param, *ret = NULL;
 	int  path_len;
 	yaf_view_t	*view;
-
+	/* 获取$this->_view */
 	view   	  = zend_read_property(yaf_controller_ce, instance, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), 1 TSRMLS_CC);
+	/* 获取$this->_name */
 	name	  = zend_read_property(yaf_controller_ce, instance, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_NAME), 1 TSRMLS_CC);
+	/* 模板文件的后缀 */
 	view_ext  = YAF_G(view_ext);
-
+	/* 将$this->_name转为小写 */
 	self_name = zend_str_tolower_dup(Z_STRVAL_P(name), Z_STRLEN_P(name));
 
 	tmp = self_name;
@@ -166,7 +170,7 @@ int yaf_controller_display(yaf_controller_t *instance, char *action_name, int le
 		}
 		tmp++;
 	}
-
+	/* 复制action_name */
 	action_name = estrndup(action_name, len);
 
 	tmp = action_name;
@@ -176,15 +180,15 @@ int yaf_controller_display(yaf_controller_t *instance, char *action_name, int le
 		}
 		tmp++;
 	}
-
+	/* $path = "index/index.phtml" */
 	path_len  = spprintf(&path, 0, "%s%c%s.%s", self_name, DEFAULT_SLASH, action_name, view_ext);
 
 	efree(self_name);
 	efree(action_name);
-
+	/* $param = $path; */
 	MAKE_STD_ZVAL(param);
 	ZVAL_STRINGL(param, path, path_len, 0);
-
+	/* 调用Yaf_View_*的成员方法display进行渲染并输出给用户 */
 	if (var_array) {
 		zend_call_method_with_2_params(&view, Z_OBJCE_P(view), NULL, "display", &ret, param, var_array);
 	} else {
@@ -538,9 +542,9 @@ PHP_METHOD(yaf_controller, redirect) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &location, &location_len) == FAILURE) {
 		return;
 	}
-
+	/* $response = $this->_response */
 	response = zend_read_property(yaf_controller_ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_RESPONSE), 1 TSRMLS_CC);
-
+	/* 设置redirect */
 	(void)yaf_response_set_redirect(response, location, location_len TSRMLS_CC);
 
 	RETURN_TRUE;
@@ -557,6 +561,7 @@ PHP_METHOD(yaf_controller, render) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|z", &action_name, &action_name_len, &var_array) == FAILURE) {
 		return;
 	} else {
+		/* 获取渲染后的结果 */
 		zval *output = yaf_controller_render(getThis(), action_name, action_name_len, var_array TSRMLS_CC);
 		if (output) {
 			if (IS_STRING == Z_TYPE_P(output)) {
@@ -584,6 +589,7 @@ PHP_METHOD(yaf_controller, display) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|z", &action_name, &action_name_len, &var_array) == FAILURE) {
 		return;
 	} else {
+		/* 渲染视图模板, 并直接输出渲染结果 */
 		RETURN_BOOL(yaf_controller_display(getThis(), action_name, action_name_len, var_array TSRMLS_CC));
 	}
 }
@@ -623,8 +629,18 @@ YAF_STARTUP_FUNCTION(controller) {
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Controller_Abstract", "Yaf\\Controller_Abstract", yaf_controller_methods);
 	yaf_controller_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* abstract Yaf_Controller_Abstract */
 	yaf_controller_ce->ce_flags |= ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
 
+	/**
+	 *	public 	  $actions   	= null;
+	 *	protected $_module   	= null;
+	 *	protected $_name     	= null;
+	 *	protected $_request  	= null;
+	 *	protected $_response 	= null;
+	 *	protected $_invoke_args = null;
+	 *	protected $_view 		= null;
+	 */
 	zend_declare_property_null(yaf_controller_ce, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ACTIONS),	ZEND_ACC_PUBLIC TSRMLS_CC);
 	zend_declare_property_null(yaf_controller_ce, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_MODULE), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_controller_ce, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_NAME), 	ZEND_ACC_PROTECTED TSRMLS_CC);
