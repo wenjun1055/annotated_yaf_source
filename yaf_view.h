@@ -41,7 +41,7 @@ typedef int(*yaf_body_write_func)(const char *str, uint str_length TSRMLS_DC);
 #define YAF_REDIRECT_OUTPUT_BUFFER(seg) \
 	do { \
 		if (!YAF_G(owrite_handler)) { \
-			YAF_G(owrite_handler) = OG(php_body_write); \
+			YAF_G(owrite_handler) = OG(php_body_write); \        /* 内容输出函数 */
 		} \
 		OG(php_body_write) = yaf_view_simple_render_write; \
 		old_scope = EG(scope); \

@@ -35,14 +35,14 @@
 
 #include "views/interface.c"
 #include "views/simple.c"
-
+/* 调试信息 */
 #if 0
 static yaf_view_struct yaf_buildin_views[] = {
 	{"classical", &yaf_view_simple_ce, yaf_view_simple_init},
 	{NULL, NULL, NULL}
 };
 #endif
-
+/* 调试信息 */
 #if 0
 /** {{{ yaf_view_t * yaf_view_instance(yaf_view_t *this_ptr TSRMLS_DC)
 */
