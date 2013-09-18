@@ -1288,7 +1288,8 @@ PHP_METHOD(yaf_dispatcher, setDefaultController) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setDefaultAction(string $name)
-*/
+ *	设置路由的默认动作, 如果在路由结果中不包含动作信息, 则会使用此默认动作作为路由动作结果
+ */ 
 PHP_METHOD(yaf_dispatcher, setDefaultAction) {
 	zval *action;
 	zval *self = getThis();
@@ -1296,14 +1297,16 @@ PHP_METHOD(yaf_dispatcher, setDefaultAction) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &action) == FAILURE) {
 		return;
 	}
-
+	/* 必须是合法字符串 */
 	if (action && IS_STRING == Z_TYPE_P(action) && Z_STRLEN_P(action)) {
 		zval *action_lower;
 		MAKE_STD_ZVAL(action_lower);
+		/* 将名称转换成全部小写 */
+		/* $this->_default_action = strtolower($action) */
 		ZVAL_STRING(action_lower, zend_str_tolower_dup(Z_STRVAL_P(action), Z_STRLEN_P(action)), 0);
 		zend_update_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ACTION), action_lower TSRMLS_CC);
 		zval_ptr_dtor(&action_lower);
-
+		/* return $this */
 		RETURN_ZVAL(self, 1, 0);
 	}
 
@@ -1362,19 +1365,37 @@ YAF_STARTUP_FUNCTION(dispatcher) {
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Dispatcher", "Yaf\\Dispatcher", yaf_dispatcher_methods);
 
 	yaf_dispatcher_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+	/* final class Yaf_Dispatcher */
 	yaf_dispatcher_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/**
+	 *	protected $_router  = null;
+	 *	protected $_view    = null;
+	 *	protected $_request = null;
+	 *	protected $_plugins = null;
+	 */
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ROUTER), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_VIEW), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_REQUEST), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_PLUGINS), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 
+	/* protected static _instance = null; */
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_INSTANCE), ZEND_ACC_PROTECTED|ZEND_ACC_STATIC TSRMLS_CC);
 
+	/**
+	 *	protected $_auto_render 	= true;
+	 *	protected $_return_response = false;
+	 *	protected $_instantly_flush = false;
+	 */
 	zend_declare_property_bool(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER),	1,  ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_bool(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RETURN),   0, ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_bool(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_FLUSH), 	0, ZEND_ACC_PROTECTED TSRMLS_CC);
 
+	/**
+	 *	protected $_default_module 	   = true;
+	 *	protected $_default_controller = true;
+	 *	protected $_default_action	   = true;
+	 */
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), 		ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_CONTROLLER), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ACTION), 	 	ZEND_ACC_PROTECTED TSRMLS_CC);
