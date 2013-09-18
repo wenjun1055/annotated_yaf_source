@@ -218,16 +218,25 @@ int yaf_controller_construct(zend_class_entry *ce, yaf_controller_t *self, yaf_r
 	zval *module;
 
 	if (args) {
+		/**
+		 *	isset($args) && $this->_invoke_args = $args
+		 */ 
 		zend_update_property(ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ARGS), args TSRMLS_CC);
 	}
-
+	/* 从Yaf_Request_*类的实例中读取成员变量$module */
 	module = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
 
+	/**
+	 *	$this->_request = $request;($request为Yaf_Request_*类的实例)
+	 *	$this->_response = $response;($request为Yaf_Response_*类的实例)
+	 *	$this->_module = $module;($module为Yaf_Request_*的成员变量)
+	 *	$this->_view = $view;($view为Yaf_View_Simple的实例)
+	 */
 	zend_update_property(ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_REQUEST), request TSRMLS_CC);
 	zend_update_property(ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_RESPONSE), response TSRMLS_CC);
 	zend_update_property(ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_MODULE), module TSRMLS_CC);
 	zend_update_property(ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), view TSRMLS_CC);
-
+	/* ce不是Yaf_Action的实例，并且ce的成员函数里面有"init"的话就调用它自身的成员函数init */
 	if (!instanceof_function(ce, yaf_action_ce TSRMLS_CC)
 			&& zend_hash_exists(&(ce->function_table), ZEND_STRS("init"))) {
 		zend_call_method_with_0_params(&self, ce, NULL, "init", NULL);
@@ -252,11 +261,12 @@ PHP_METHOD(yaf_controller, __construct) {
 	yaf_view_t		*view;
 	zval 			*invoke_arg = NULL;
 	yaf_controller_t *self = getThis();
-
+	/* 三个参数必传 */
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ooo|z",
 				&request, yaf_request_ce, &response, yaf_response_ce, &view, yaf_view_interface_ce, &invoke_arg) == FAILURE) {
 		return;
 	} else	{
+		/* 进行类的成员变量的初始化工作，然后调用init方法，失败就返回false */
 		if(!yaf_controller_construct(yaf_controller_ce, self, request, response, view, invoke_arg TSRMLS_CC)) {
 			RETURN_FALSE;
 		}
@@ -265,7 +275,8 @@ PHP_METHOD(yaf_controller, __construct) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getView(void)
-*/
+ *	获取视图引擎类的实例
+ */
 PHP_METHOD(yaf_controller, getView) {
 	yaf_view_t *view = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), 1 TSRMLS_CC);
 	RETURN_ZVAL(view, 1, 0);
@@ -273,7 +284,8 @@ PHP_METHOD(yaf_controller, getView) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getRequest(void)
-*/
+ *	获取Yaf_Request_*的实例
+ */
 PHP_METHOD(yaf_controller, getRequest) {
 	yaf_request_t *request = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_REQUEST), 1 TSRMLS_CC);
 	RETURN_ZVAL(request, 1, 0);
@@ -281,7 +293,8 @@ PHP_METHOD(yaf_controller, getRequest) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getResponse(void)
-*/
+ *	获取Yaf_Response_*的实例
+ */
 PHP_METHOD(yaf_controller, getResponse) {
 	yaf_view_t *response = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_RESPONSE), 1 TSRMLS_CC);
 	RETURN_ZVAL(response, 1, 0);
@@ -289,6 +302,7 @@ PHP_METHOD(yaf_controller, getResponse) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::initView(array $options = NULL)
+ *	TODO 难道是bug
 */
 PHP_METHOD(yaf_controller, initView) {
 	RETURN_ZVAL(getThis(), 1, 0);
@@ -307,12 +321,13 @@ PHP_METHOD(yaf_controller, getInvokeArg) {
 
 	if (len) {
 		zval **ppzval, *args;
+		/* $args = $this->_invoke_args */
 		args = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ARGS), 1 TSRMLS_CC);
-
+		/* if (null === $args) { return null; } */
 		if (ZVAL_IS_NULL(args)) {
 			RETURN_NULL();
 		}
-
+		/* 在$this->_invoke_args成员变量数组中查找name的值，找到就返回，没找到返回NULL */
 		if (zend_hash_find(Z_ARRVAL_P(args), name, len + 1, (void **)&ppzval) == SUCCESS) {
 			RETURN_ZVAL(*ppzval, 1, 0);
 		}
@@ -322,6 +337,7 @@ PHP_METHOD(yaf_controller, getInvokeArg) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getInvokeArgs(void)
+ *	获取 $this->_invoke_args
  */
 PHP_METHOD(yaf_controller, getInvokeArgs) {
 	zval *args = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ARGS), 1 TSRMLS_CC);
@@ -330,6 +346,7 @@ PHP_METHOD(yaf_controller, getInvokeArgs) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getModuleName(void)
+ *	获取 $this->_module
  */
 PHP_METHOD(yaf_controller, getModuleName) {
 	zval *module = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
@@ -338,7 +355,8 @@ PHP_METHOD(yaf_controller, getModuleName) {
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::setViewpath(string $view_directory)
-*/
+ *	设置模板文件夹路径
+ */
 PHP_METHOD(yaf_controller, setViewpath) {
 	zval 		*path;
 	yaf_view_t 	*view;
@@ -347,29 +365,37 @@ PHP_METHOD(yaf_controller, setViewpath) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &path) == FAILURE) {
 		return;
 	}
-
+	/* if (is_string($path)) {return false;} */
 	if (Z_TYPE_P(path) != IS_STRING) {
 		RETURN_FALSE;
 	}
-
+	/* $view = $this->_view */
 	view = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), 0 TSRMLS_CC);
+	/** 	
+	 *	如果view是由Yaf_View_Simple实例化生成的则直接将模板路径赋值给Yaf_View_Simple的成员变量_tpl_dir；
+	 *	不然的话则调用Yaf_View_Interface的成员方法setScriptpath来设置path
+	 */
 	if ((view_ce = Z_OBJCE_P(view)) == yaf_view_simple_ce) {
 		zend_update_property(view_ce, view, ZEND_STRL(YAF_VIEW_PROPERTY_NAME_TPLDIR), path TSRMLS_CC);
 	} else {
 		zend_call_method_with_1_params(&view, view_ce, NULL, "setscriptpath", NULL, path);
 	}
-
+	/* return true; */
 	RETURN_TRUE;
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Controller_Abstract::getViewpath(void)
-*/
+ *	获取模板文件夹路径
+ */
 PHP_METHOD(yaf_controller, getViewpath) {
 	zend_class_entry *view_ce;
+	/* $view = $this->_view */
 	zval *view = zend_read_property(yaf_controller_ce, getThis(), ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_VIEW), 1 TSRMLS_CC);
+	/* 如果$view是由Yaf_View_Simple实例化产生的那么就直接读取它的成员变量$_tpl_dir，否则就调用继承了Yaf_View_Interface的类的getScriptpath方法 */
 	if ((view_ce = Z_OBJCE_P(view)) == yaf_view_simple_ce) {
 		zval *tpl_dir = zend_read_property(view_ce, view, ZEND_STRL(YAF_VIEW_PROPERTY_NAME_TPLDIR), 1 TSRMLS_CC);
+		/* 如果Yaf_View_Simple::$_tpl_dir的值不是字符串并且设置了YAF_G(view_directory)就返回YAF_G(view_directory)，否则的话返回Yaf_View_Simple::$_tpl_dir */
 		if (IS_STRING != Z_TYPE_P(tpl_dir) && YAF_G(view_directory)) {
 			RETURN_STRING(YAF_G(view_directory), 1);
 		}
@@ -394,24 +420,28 @@ PHP_METHOD(yaf_controller, forward) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|zzz", &module, &controller, &action, &args) == FAILURE) {
 		return;
 	}
-
+	/* 获取Yaf_Request_*的实例$this->_request */
 	request    = zend_read_property(yaf_controller_ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_REQUEST), 1 TSRMLS_CC);
+	/* 获取$this->_invoke_args */
 	parameters = zend_read_property(yaf_controller_ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ARGS), 1 TSRMLS_CC);
-
+	/* 判断$this->_request不是对象或者不是继承自Yaf_Request_Abstract则返回false */
 	if (Z_TYPE_P(request) != IS_OBJECT
 			|| !instanceof_function((request_ce = Z_OBJCE_P(request)), yaf_request_ce TSRMLS_CC)) {
 		RETURN_FALSE;
 	}
 
+	/* 如果$this->_invoke_args = null，则给它设置一个数组作为值 */
 	if (ZVAL_IS_NULL(parameters)) {
 		MAKE_STD_ZVAL(parameters);
 		array_init(parameters);
 		zend_update_property(yaf_controller_ce, self, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ARGS), parameters TSRMLS_CC);
 		zval_ptr_dtor(&parameters);
 	}
-
+	/* 传递的参数可以是1、2、3、4个 */
 	switch (ZEND_NUM_ARGS()) {
 		case 1:
+			/* 1个参数则是action，action名必须为字符串，Yaf_Request_*::$action = $module */
+			/* Yaf_Controller_Abstract::forward(string $action); */
 			if (Z_TYPE_P(module) != IS_STRING) {
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a string action name");
 				RETURN_FALSE;
@@ -419,10 +449,23 @@ PHP_METHOD(yaf_controller, forward) {
 			zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), module TSRMLS_CC);
 			break;
 		case 2:
+			/* 2个参数 */
 			if (Z_TYPE_P(controller) ==  IS_STRING) {
+				/**
+				 *	第二个参数为字符串：
+				 *		Yaf_Request_*::$controller = $mocdule
+				 *		Yaf_Request_*::$action = $$controller
+				 *	Yaf_Controller_Abstract::forward(string $controller, string $action);
+				 */
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), module TSRMLS_CC);
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), controller TSRMLS_CC);
 			} else if (Z_TYPE_P(controller) == IS_ARRAY) {
+				/**
+				 *	第二个参数为数组：
+				 *		将action数组的值复制给Yaf_Request_*::$params
+				 *		Yaf_Request_*::$action = $mocdule
+				 *	Yaf_Controller_Abstract::forward(string $action ,array $params);
+				 */
 				zend_hash_copy(Z_ARRVAL_P(parameters), Z_ARRVAL_P(controller), (copy_ctor_func_t) zval_add_ref, NULL, sizeof(zval *));
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), module TSRMLS_CC);
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), parameters TSRMLS_CC);
@@ -431,11 +474,24 @@ PHP_METHOD(yaf_controller, forward) {
 			}
 			break;
 		case 3:
+			/* 3个参数 */
 			if (Z_TYPE_P(action) == IS_STRING) {
+				/**
+				 *	第三个参数为字符串，则认为它是action名称
+				 *		Yaf_Request_*::$module = $module
+				 *		Yaf_Request_*::$controller = $controller
+				 *		Yaf_Request_*::$action = $action
+				 */
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), module TSRMLS_CC);
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), controller TSRMLS_CC);
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), action TSRMLS_CC);
 			} else if (Z_TYPE_P(action) == IS_ARRAY) {
+				/**
+				 *	第三个参数为数组，则认为它是parameters
+				 *		Yaf_Request_*::$controller = $module
+				 *		Yaf_Request_*::$action = $controller
+				 *		Yaf_Request_*::$params = $parameters
+				 */
 				zend_hash_copy(Z_ARRVAL_P(parameters), Z_ARRVAL_P(action), (copy_ctor_func_t) zval_add_ref, NULL, sizeof(zval *));
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), module TSRMLS_CC);
 				zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), controller TSRMLS_CC);
@@ -445,10 +501,19 @@ PHP_METHOD(yaf_controller, forward) {
 			}
 			break;
 		case 4:
+			/* 4个参数 */
 			if (Z_TYPE_P(args) != IS_ARRAY) {
+				/* 第四个参数为Parameter，不为数组就报错 */
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Parameters must be an array");
 				RETURN_FALSE;
 			}
+			/**
+			 *	$parameters = $args;
+			 *	Yaf_Request_*::$module = $module
+			 *	Yaf_Request_*::$controller = $controller
+			 *	Yaf_Request_*::$action = $action
+			 *	Yaf_Request_*::$params = $parameters
+			 */
 			zend_hash_copy(Z_ARRVAL_P(parameters), Z_ARRVAL_P(args), (copy_ctor_func_t) zval_add_ref, NULL, sizeof(zval *));
 			zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), module TSRMLS_CC);
 			zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), controller TSRMLS_CC);
@@ -456,7 +521,7 @@ PHP_METHOD(yaf_controller, forward) {
 			zend_update_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), parameters TSRMLS_CC);
 			break;
 	}
-
+	/* 设置分发标识Yaf_Request_Abstract::$dispatched = 0 */
 	(void)yaf_request_set_dispatched(request, 0 TSRMLS_CC);
 	RETURN_TRUE;
 }
