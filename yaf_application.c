@@ -501,6 +501,7 @@ PHP_METHOD(yaf_application, __construct) {
 /** {{{ proto public Yaf_Application::__desctruct(void)
 */
 PHP_METHOD(yaf_application, __destruct) {
+	/* self::$_app = null */
    zend_update_static_property_null(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_APP) TSRMLS_CC);
 }
 /* }}} */
@@ -530,17 +531,19 @@ PHP_METHOD(yaf_application, run) {
 	yaf_dispatcher_t  *dispatcher;
 	yaf_response_t	  *response;
 	yaf_application_t *self = getThis();
-
+	/* $running = $this->_running */
 	running = zend_read_property(yaf_application_ce, self, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_RUN), 1 TSRMLS_CC);
+	/* if ($running === true) {报错}*/
 	if (IS_BOOL == Z_TYPE_P(running)
 			&& Z_BVAL_P(running)) {
 		yaf_trigger_error(YAF_ERR_STARTUP_FAILED TSRMLS_CC, "An application instance already run");
 		RETURN_TRUE;
 	}
-
+	/* $running = true */
 	ZVAL_BOOL(running, 1);
+	/* $this->_running = $running */
 	zend_update_property(yaf_application_ce, self, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_RUN), running TSRMLS_CC);
-
+	/* $dispatcher = $this->dispatcher */
 	dispatcher = zend_read_property(yaf_application_ce, self, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_DISPATCHER), 1 TSRMLS_CC);
 	if ((response = yaf_dispatcher_dispatch(dispatcher TSRMLS_CC))) {
 		RETURN_ZVAL(response, 1, 1);
