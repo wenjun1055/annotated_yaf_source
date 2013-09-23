@@ -48,47 +48,54 @@ yaf_route_t * yaf_route_instance(yaf_route_t *this_ptr, zval *config TSRMLS_DC) 
 	zval **match, **def, **map, **ppzval;
 	yaf_route_t *instance = NULL;
 
+	/* config必须为数组 */
 	if (!config || IS_ARRAY != Z_TYPE_P(config)) {
 		return NULL;
 	}
 
+	/* routes.sample.type值必须为字符串，不然的话返回null */
 	if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("type"), (void **)&ppzval) == FAILURE
 			|| IS_STRING != Z_TYPE_PP(ppzval)) {
 		return NULL;
 	}
 
 	if (Z_STRLEN_PP(ppzval) == (sizeof("rewrite") - 1)
-			&& strncasecmp(Z_STRVAL_PP(ppzval), "rewrite", sizeof("rewrite") - 1) == 0) {
+			&& strncasecmp(Z_STRVAL_PP(ppzval), "rewrite", sizeof("rewrite") - 1) == 0) {	/* routes.sample.type = "rewrite" */
+		/* routes.sample.match必须存在，且值为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("match"), (void **)&match) == FAILURE
 				|| Z_TYPE_PP(match) != IS_STRING) {
 			return NULL;
 		}
+		/* routes.sample.route必须存在，且值数组 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("route"), (void **)&def) == FAILURE
 				|| Z_TYPE_PP(def) != IS_ARRAY) {
 			return NULL;
 		}
-
+		/* 初始化类Yaf_Route_Rewrite */
 		instance = yaf_route_rewrite_instance(NULL, *match, *def, NULL TSRMLS_CC);
 	} else if (Z_STRLEN_PP(ppzval) == (sizeof("regex") - 1)
-			&& strncasecmp(Z_STRVAL_PP(ppzval), "regex", sizeof("regex") - 1) == 0) {
+			&& strncasecmp(Z_STRVAL_PP(ppzval), "regex", sizeof("regex") - 1) == 0) {	/* routes.sample.regex = "rewrite" */
+		/* routes.sample.match必须存在，且值为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("match"), (void **)&match) == FAILURE || Z_TYPE_PP(match) != IS_STRING) {
 			return NULL;
 		}
+		/* routes.sample.route必须存在，且值数组 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("route"), (void **)&def) == FAILURE
 				|| Z_TYPE_PP(def) != IS_ARRAY) {
 			return NULL;
 		}
+		/* routes.sample.map必须存在，且值数组 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("map"), (void **)&map) == FAILURE || Z_TYPE_PP(map) != IS_ARRAY) {
 			return NULL;
 		}
-
+		/* 初始化类Yaf_Route_Regex */
 		instance = yaf_route_regex_instance(NULL, *match, *def, *map, NULL TSRMLS_CC);
 	} else if (Z_STRLEN_PP(ppzval) == (sizeof("map") - 1)
-			&& strncasecmp(Z_STRVAL_PP(ppzval), "map", sizeof("map") - 1) == 0) {
+			&& strncasecmp(Z_STRVAL_PP(ppzval), "map", sizeof("map") - 1) == 0) {	/* routes.sample.regex = "map" */
 		char *delimiter = NULL;
 		uint delim_len  = 0;
 		zend_bool controller_prefer = 0;
-		
+		/* routes.sample.controllerPrefer = "xxx" */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("controllerPrefer"), (void **)&ppzval) == SUCCESS) {
 			zval *tmp = *ppzval;
 			Z_ADDREF_P(tmp);
@@ -96,40 +103,44 @@ yaf_route_t * yaf_route_instance(yaf_route_t *this_ptr, zval *config TSRMLS_DC) 
 			controller_prefer = Z_BVAL_P(tmp);
 			zval_ptr_dtor(&tmp);
 		}
-
+		/* routes.sample.delimiter = "xxx" 值必须为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("delimiter"), (void **)&ppzval) == SUCCESS
 				&& Z_TYPE_PP(ppzval) == IS_STRING) {
 			delimiter = Z_STRVAL_PP(ppzval);
 			delim_len = Z_STRLEN_PP(ppzval);
 		}
-
+		/* 初始化类Yaf_Route_Map */
 		instance = yaf_route_map_instance(NULL, controller_prefer, delimiter, delim_len TSRMLS_CC);
 	} else if (Z_STRLEN_PP(ppzval) == (sizeof("simple") - 1)
-			&& strncasecmp(Z_STRVAL_PP(ppzval), "simple", sizeof("simple") - 1) == 0) {
+			&& strncasecmp(Z_STRVAL_PP(ppzval), "simple", sizeof("simple") - 1) == 0) {		/* routes.sample.regex = "simple" */
+		/* routes.sample.module = "xxx" 必须存在，且值必须为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("module"), (void **)&match) == FAILURE
 				|| Z_TYPE_PP(match) != IS_STRING) {
 			return NULL;
 		}
+		/* routes.sample.controller = "xxx" 必须存在，且值必须为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("controller"), (void **)&def) == FAILURE
 				|| Z_TYPE_PP(def) != IS_STRING) {
 			return NULL;
 		}
+		/* routes.sample.action = "xxx" 必须存在，且值必须为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("action"), (void **)&map) == FAILURE
 				|| Z_TYPE_PP(map) != IS_STRING) {
 			return NULL;
 		}
-
+		/* 初始化类Yaf_Route_Simple */
 		instance = yaf_route_simple_instance(NULL, *match, *def, *map TSRMLS_CC);
 	} else if (Z_STRLEN_PP(ppzval) == (sizeof("supervar") - 1)
-			&& strncasecmp(Z_STRVAL_PP(ppzval), "supervar", sizeof("supervar") - 1) == 0) {
+			&& strncasecmp(Z_STRVAL_PP(ppzval), "supervar", sizeof("supervar") - 1) == 0) {		/* routes.sample.regex = "supervar" */
+		/* routes.sample.varname = "xxx" 必须存在，且值必须为字符串 */
 		if (zend_hash_find(Z_ARRVAL_P(config), ZEND_STRS("varname"), (void **)&match) == FAILURE
 				|| Z_TYPE_PP(match) != IS_STRING) {
 			return NULL;
 		}
-
+		/* 初始化类Yaf_Route_Supervar */
 		instance = yaf_route_supervar_instance(NULL, *match TSRMLS_CC);
 	}
-
+	/* 返回初始化路由后返回的实例 */
 	return instance;
 }
 /* }}} */
@@ -147,6 +158,7 @@ zend_function_entry yaf_route_methods[] = {
 YAF_STARTUP_FUNCTION(route) {
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Route_Interface", "Yaf\\Route_Interface", yaf_route_methods);
+	/* interface Yaf_Route_Interface */
 	yaf_route_ce = zend_register_internal_interface(&ce TSRMLS_CC);
 
 	YAF_STARTUP(route_static);
