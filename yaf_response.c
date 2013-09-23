@@ -131,6 +131,7 @@ static int yaf_response_set_body(yaf_response_t *response, char *name, int name_
 /* }}} */
 
 /** {{{ int yaf_response_alter_body(yaf_response_t *response, char *name, int name_len, char *body, long body_len, int flag TSRMLS_DC)
+ *	为Yaf_Response_Abstract::_body设置响应的值
  */
 int yaf_response_alter_body(yaf_response_t *response, char *name, int name_len, char *body, long body_len, int flag TSRMLS_DC) {
 	zval *zbody, **ppzval;

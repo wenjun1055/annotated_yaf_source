@@ -109,7 +109,8 @@ ZEND_END_ARG_INFO()
 /* }}} */
 
 /** {{{ yaf_dispatcher_t * yaf_dispatcher_instance(zval *this_ptr TSRMLS_DC)
-*/
+ *	类的__construct函数，单例模式
+ */
 yaf_dispatcher_t * yaf_dispatcher_instance(yaf_dispatcher_t *this_ptr TSRMLS_DC) {
 	zval				*plugins;
 	yaf_router_t	 	*router;
@@ -157,13 +158,14 @@ yaf_dispatcher_t * yaf_dispatcher_instance(yaf_dispatcher_t *this_ptr TSRMLS_DC)
 /* }}} */
 
 /** {{{ static void yaf_dispatcher_get_call_parameters(zend_class_entry *request_ce, yaf_request_t *request, zend_function *fptr, zval ****params, uint *count TSRMLS_DC)
+ *	获得当前method需要获得的参数
  */
 static void yaf_dispatcher_get_call_parameters(zend_class_entry *request_ce, yaf_request_t *request, zend_function *fptr, zval ****params, uint *count TSRMLS_DC) {
 	zval 		  	*args, **arg;
 	zend_arg_info 	*arg_info;
 	uint 		 	current;
 	HashTable 		*params_ht;
-
+	/* $args = Yaf_Request_Abstract::$params */
 	args = zend_read_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_PARAMS), 1 TSRMLS_CC);
 
 	params_ht = Z_ARRVAL_P(args);
@@ -210,19 +212,22 @@ static void yaf_dispatcher_get_call_parameters(zend_class_entry *request_ce, yaf
 /* }}} */
 
 /** {{{ static yaf_view_t * yaf_dispatcher_init_view(yaf_dispatcher_t *dispatcher, zval *tpl_dir, zval *options TSRMLS_DC)
+ *	在dispatcher中实例化视图引擎
 */
 static yaf_view_t * yaf_dispatcher_init_view(yaf_dispatcher_t *dispatcher, zval *tpl_dir, zval *options TSRMLS_DC) {
+	/* $view = $this->_view */
 	yaf_view_t *view = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_VIEW), 1 TSRMLS_CC);
 	if (view && IS_OBJECT == Z_TYPE_P(view)
 			&& instanceof_function(Z_OBJCE_P(view), yaf_view_interface_ce TSRMLS_CC)) {
+		/* 已经初始化视图引擎则返回试图引擎实例化后的对象 */
 		return view;
 	}
-
+	/* 实例化视图引擎 */
 	view = yaf_view_instance(NULL, tpl_dir, options TSRMLS_CC);
 	if (!view) {
 		return NULL;
 	}
-
+	/* $this->_view = $view */
 	zend_update_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_VIEW), view TSRMLS_CC);
 	zval_ptr_dtor(&view);
 
@@ -231,28 +236,38 @@ static yaf_view_t * yaf_dispatcher_init_view(yaf_dispatcher_t *dispatcher, zval 
 /* }}} */
 
 /** {{{ static inline void yaf_dispatcher_fix_default(yaf_dispatcher_t *dispatcher, yaf_request_t *request TSRMLS_DC)
-*/
+ *	检测路由的module、controller、action名称是否合法，不合法的用默认代替，合法的进行需要的响应的转换工作
+ */
 static inline void yaf_dispatcher_fix_default(yaf_dispatcher_t *dispatcher, yaf_request_t *request TSRMLS_DC) {
 	zval	*module, *controller, *action;
-
+	/* $module = Yaf_Request::$module */
 	module 		= zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
+	/* $action = Yaf_Request::$action */
 	action	 	= zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), 1 TSRMLS_CC);
+	/* $controller = Yaf_Request::$controller */
 	controller 	= zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), 1 TSRMLS_CC);
-
-	if (!module || Z_TYPE_P(module) != IS_STRING || !Z_STRLEN_P(module)) {
+	/* 1.设置路由的module */
+	if (!module || Z_TYPE_P(module) != IS_STRING || !Z_STRLEN_P(module)) {	/* module名称非法 */
+		/* $default_module = $this->_default_module */
 		zval *default_module = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
+		/* Yaf_Request::$module = $default_module */
 		zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), default_module TSRMLS_CC);
-	} else {
+	} else {	/* module名称合法 */
+		/* tolower */
 		char *p = zend_str_tolower_dup(Z_STRVAL_P(module), Z_STRLEN_P(module));
+		/* toupper */
 		*p = toupper(*p);
+		/* Yaf_Request::$module = $p */
 		zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), p, Z_STRLEN_P(module) TSRMLS_CC);
 		efree(p);
 	}
-
-	if (!controller || Z_TYPE_P(controller) != IS_STRING || !Z_STRLEN_P(controller)) {
+	/* 2.设置路由的controller */
+	if (!controller || Z_TYPE_P(controller) != IS_STRING || !Z_STRLEN_P(controller)) {	/* controller名称非法 */
+		/* $default_controller = $this->_default_controller */
 		zval *default_controller = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_CONTROLLER), 1 TSRMLS_CC);
+		/* Yaf_Request::$controller = $default_controller */
 		zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), default_controller TSRMLS_CC);
-	} else {
+	} else {	/* controller名称合法 */
 		char *q, *p = zend_str_tolower_dup(Z_STRVAL_P(controller), Z_STRLEN_P(controller));
 
 		/**
@@ -274,15 +289,18 @@ static inline void yaf_dispatcher_fix_default(yaf_dispatcher_t *dispatcher, yaf_
 			}
 			q++;
 		}
-
+		/* Yaf_Request::$controller = $p */
 		zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), p, Z_STRLEN_P(controller) TSRMLS_CC);
 		efree(p);
 	}
-
-	if (!action || Z_TYPE_P(action) != IS_STRING || !Z_STRLEN_P(action)) {
+	/* 3.设置路由的action */
+	if (!action || Z_TYPE_P(action) != IS_STRING || !Z_STRLEN_P(action)) {	//action名称非法
+		/* $default_action = $this->_default_action */
 		zval *default_action = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ACTION), 1 TSRMLS_CC);
+		/* Yaf_Request::$action = $default_action */
 		zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), default_action TSRMLS_CC);
-	} else {
+	} else {	//action名称合法
+		/* Yaf_Request::$action = strtolower($action) */
 		char *p = zend_str_tolower_dup(Z_STRVAL_P(action), Z_STRLEN_P(action));
 		zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), p, Z_STRLEN_P(action) TSRMLS_CC);
 		efree(p);
@@ -294,6 +312,7 @@ static inline void yaf_dispatcher_fix_default(yaf_dispatcher_t *dispatcher, yaf_
 */
 int yaf_dispatcher_set_request(yaf_dispatcher_t *dispatcher, yaf_request_t *request TSRMLS_DC) {
 	if (request) {
+		/* $this->_request = $request */
 		zend_update_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_REQUEST), request TSRMLS_CC);
 		return 1;
 	}
@@ -302,14 +321,17 @@ int yaf_dispatcher_set_request(yaf_dispatcher_t *dispatcher, yaf_request_t *requ
 /* }}} */
 
 /** {{{ zend_class_entry * yaf_dispatcher_get_controller(char *app_dir, char *module, char *controller, int len, int def_module TSRMLS_DC)
+ *	拼装得到controller的文件路径，然后注册类	
  */
 zend_class_entry * yaf_dispatcher_get_controller(char *app_dir, char *module, char *controller, int len, int def_module TSRMLS_DC) {
 	char *directory 	= NULL;
 	int	 directory_len 	= 0;
-
+	/* 分为默认module和不是默认module的情况来拼装controllers文件夹的路径 */
 	if (def_module) {
+		/* /home/www/sample.com/application/controllers */
 		directory_len = spprintf(&directory, 0, "%s%c%s", app_dir, DEFAULT_SLASH, YAF_CONTROLLER_DIRECTORY_NAME);
 	} else {
+		/* /home/www/sample.com/application/modules/module1/controllers */
 		directory_len = spprintf(&directory, 0, "%s%c%s%c%s%c%s", app_dir, DEFAULT_SLASH,
 				YAF_MODULE_DIRECTORY_NAME, DEFAULT_SLASH, module, DEFAULT_SLASH, YAF_CONTROLLER_DIRECTORY_NAME);
 	}
@@ -319,30 +341,33 @@ zend_class_entry * yaf_dispatcher_get_controller(char *app_dir, char *module, ch
 		char *class_lowercase = NULL;
 		int	 class_len		  = 0;
 		zend_class_entry **ce = NULL;
-
+		/* 根据controller名以及框架的前后缀还有类名分隔符来拼装类名 */
 		if (YAF_G(name_suffix)) {
 			class_len = spprintf(&class, 0, "%s%s%s", controller, YAF_G(name_separator), "Controller");
 		} else {
 			class_len = spprintf(&class, 0, "%s%s%s", "Controller", YAF_G(name_separator), controller);
 		}
-
+		/**
+		 *	$class_lowercase = strtolower($class) 
+		 *	在Zend中类名和其成员函数是小写的
+		 */
 		class_lowercase = zend_str_tolower_dup(class, class_len);
+		/* EG(class_table)是一个全局变量, 所有的zend_class_entry定义都注册到它里面 */
+		if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void *)&ce) != SUCCESS) {	/* 类还没有注册，执行注册操作 */
 
-		if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void *)&ce) != SUCCESS) {
-
-			if (!yaf_internal_autoload(controller, len, &directory TSRMLS_CC)) {
+			if (!yaf_internal_autoload(controller, len, &directory TSRMLS_CC)) {	/* 接收文件名和文件所在文件夹路径，拼装出完整文件的路径，然后对文件是否存在的判断，包含，解析以及执行过程 */
 				yaf_trigger_error(YAF_ERR_NOTFOUND_CONTROLLER TSRMLS_CC, "Failed opening controller script %s: %s", directory, strerror(errno));
 				efree(class);
 				efree(class_lowercase);
 				efree(directory);
 				return NULL;
-			} else if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) != SUCCESS)  {
+			} else if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) != SUCCESS)  {	/* 注册成功后，EG(class_table)中还是不存在 */
 				yaf_trigger_error(YAF_ERR_AUTOLOAD_FAILED TSRMLS_CC, "Could not find class %s in controller script %s", class, directory);
 				efree(class);
 				efree(class_lowercase);
 				efree(directory);
 				return 0;
-			} else if (!instanceof_function(*ce, yaf_controller_ce TSRMLS_CC)) {
+			} else if (!instanceof_function(*ce, yaf_controller_ce TSRMLS_CC)) {	/* 注册成功了，但是注册的类不是继承自Yaf_Controller_Abstract */
 				yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Controller must be an instance of %s", yaf_controller_ce->name);
 				efree(class);
 				efree(class_lowercase);
@@ -363,17 +388,19 @@ zend_class_entry * yaf_dispatcher_get_controller(char *app_dir, char *module, ch
 /* }}} */
 
 /** {{{ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *controller, char *module, int def_module, char *action, int len TSRMLS_DC)
+ *	拼装得到action的文件路径，然后进行class和method的注册
  */
 zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *controller, char *module, int def_module, char *action, int len TSRMLS_DC) {
 	zval **ppaction, *actions_map;
-
+	/* $actions_map = Yaf_Controller_Abstract::$actions */
 	actions_map = zend_read_property(Z_OBJCE_P(controller), controller, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_ACTIONS), 1 TSRMLS_CC);
-	if (IS_ARRAY == Z_TYPE_P(actions_map)) {
-		if (zend_hash_find(Z_ARRVAL_P(actions_map), action, len + 1, (void **)&ppaction) == SUCCESS) {
+	if (IS_ARRAY == Z_TYPE_P(actions_map)) {	//数组
+		if (zend_hash_find(Z_ARRVAL_P(actions_map), action, len + 1, (void **)&ppaction) == SUCCESS) {	//action查找成功
 			char *action_path;
 			uint action_path_len;
-
+			/* 拼装action路径 */
 			action_path_len = spprintf(&action_path, 0, "%s%c%s", app_dir, DEFAULT_SLASH, Z_STRVAL_PP(ppaction));
+			/* 加载文件并编译执行 */
 			if (yaf_loader_import(action_path, action_path_len, 0 TSRMLS_CC)) {
 				zend_class_entry **ce;
 				char *class, *class_lowercase;
@@ -382,15 +409,15 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 
 				*(action_upper) = toupper(*action_upper);
 
-				if (YAF_G(name_suffix)) {
+				if (YAF_G(name_suffix)) {	//Action后缀
 					class_len = spprintf(&class, 0, "%s%s%s", action_upper, YAF_G(name_separator), "Action");
-				} else {
+				} else {	//Action前缀
 					class_len = spprintf(&class, 0, "%s%s%s", "Action", YAF_G(name_separator), action_upper);
 				}
 
 				class_lowercase = zend_str_tolower_dup(class, class_len);
-
-				if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) == SUCCESS) {
+				/* 检验controller类注册 */
+				if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) == SUCCESS) {	//查找成功，类已经注册，执行完毕，释放资源
 					efree(action_path);
 					efree(action_upper);
 					efree(class_lowercase);
@@ -420,9 +447,9 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 			yaf_trigger_error(YAF_ERR_NOTFOUND_ACTION TSRMLS_CC, "There is no method %s%s in %s::$%s",
 					action, "Action", Z_OBJCE_P(controller)->name, YAF_CONTROLLER_PROPERTY_NAME_ACTIONS);
 		}
-	} else
+	} else	//不是数组,正常情况下为数组值
 /* {{{ This only effects internally */
-	   	if (YAF_G(st_compatible)) {
+	if (YAF_G(st_compatible)) {		//开启兼容模式
 		char *directory, *class, *class_lowercase, *p;
 		uint class_len;
 		zend_class_entry **ce;
@@ -447,24 +474,24 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 			}
 			p++;
 		}
-
+		/* 拼装module路径 */
 		if (def_module) {
 			spprintf(&directory, 0, "%s%c%s", app_dir, DEFAULT_SLASH, "actions");
 		} else {
 			spprintf(&directory, 0, "%s%c%s%c%s%c%s", app_dir, DEFAULT_SLASH,
 					"modules", DEFAULT_SLASH, module, DEFAULT_SLASH, "actions");
 		}
-
+		/* 通过前后缀拼装action完整名称 */
 		if (YAF_G(name_suffix)) {
 			class_len = spprintf(&class, 0, "%s%s%s", action_upper, YAF_G(name_separator), "Action");
 		} else {
 			class_len = spprintf(&class, 0, "%s%s%s", "Action", YAF_G(name_separator), action_upper);
 		}
-
+		/* 转换小写 */
 		class_lowercase = zend_str_tolower_dup(class, class_len);
 
-		if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void *)&ce) != SUCCESS) {
-			if (!yaf_internal_autoload(action_upper, len, &directory TSRMLS_CC)) {
+		if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void *)&ce) != SUCCESS) {	//注册类中查找类名
+			if (!yaf_internal_autoload(action_upper, len, &directory TSRMLS_CC)) {	//加载承载action的文件失败
 				yaf_trigger_error(YAF_ERR_NOTFOUND_ACTION TSRMLS_CC, "Failed opening action script %s: %s", directory, strerror(errno));
 
 				efree(class);
@@ -472,7 +499,7 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 				efree(class_lowercase);
 				efree(directory);
 				return NULL;
-			} else if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) != SUCCESS)  {
+			} else if (zend_hash_find(EG(class_table), class_lowercase, class_len + 1, (void **) &ce) != SUCCESS)  {	//成功加载，但是还是在注册哈希表中没找到
 				yaf_trigger_error(YAF_ERR_AUTOLOAD_FAILED TSRMLS_CC, "Could find class %s in action script %s", class, directory);
 
 				efree(class);
@@ -480,7 +507,7 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 				efree(class_lowercase);
 				efree(directory);
 				return NULL;
-			} else if (!instanceof_function(*ce, yaf_action_ce TSRMLS_CC)) {
+			} else if (!instanceof_function(*ce, yaf_action_ce TSRMLS_CC)) {	/* 不是继承自Yaf_Action_Abstract */
 				yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Action must be an instance of %s", yaf_action_ce->name);
 
 				efree(class);
@@ -508,15 +535,16 @@ zend_class_entry * yaf_dispatcher_get_action(char *app_dir, yaf_controller_t *co
 /* }}} */
 
 /** {{{ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request,  yaf_response_t *response, yaf_view_t *view TSRMLS_DC)
-*/
+ *	进行controller文件的加载、然后执行action，最后根据配置来进行模板渲染以及输出	
+ */
 int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request,  yaf_response_t *response, yaf_view_t *view TSRMLS_DC) {
 	zend_class_entry *request_ce;
 	char *app_dir = YAF_G(directory);
 
 	request_ce = Z_OBJCE_P(request);
-
+	/* Yaf_Request::dispatched = 1 */
 	yaf_request_set_dispatched(request, 1 TSRMLS_CC);
-	if (!app_dir) {
+	if (!app_dir) {	/* 没设置application.directory */
 		yaf_trigger_error(YAF_ERR_STARTUP_FAILED TSRMLS_CC, "%s requires %s(which set the application.directory) to be initialized first",
 				yaf_dispatcher_ce->name, yaf_application_ce->name);
 		return 0;
@@ -528,12 +556,20 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 		yaf_controller_t *executor;
 		zend_function    *fptr;
 
+		/**
+		 *	$module = Yaf_Request::$module
+		 *	$controller = Yaf_Request::$controller
+		 */
 		module		= zend_read_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
 		controller	= zend_read_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), 1 TSRMLS_CC);
-
+		/**
+		 *	$dmodule = $this->_default_module
+		 *	$dcontroller = $this->_default_controller
+		 */
 		dmodule		= zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
 		dcontroller = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_CONTROLLER), 1 TSRMLS_CC);
 
+		/* 从字符串角度和已经注册了的module来检测当前的module是否合法 */
 		if (Z_TYPE_P(module) != IS_STRING
 				|| !Z_STRLEN_P(module)) {
 			yaf_trigger_error(YAF_ERR_DISPATCH_FAILED TSRMLS_CC, "Unexcepted a empty module name");
@@ -542,13 +578,13 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 			yaf_trigger_error(YAF_ERR_NOTFOUND_MODULE TSRMLS_CC, "There is no module %s", Z_STRVAL_P(module));
 			return 0;
 		}
-
+		/* 以合法字符串方式来检验controller */
 		if (Z_TYPE_P(controller) != IS_STRING
 				|| !Z_STRLEN_P(controller)) {
 			yaf_trigger_error(YAF_ERR_DISPATCH_FAILED TSRMLS_CC, "Unexcepted a empty controller name");
 			return 0;
 		}
-
+		/* 检测传进来的module名是否为默认的module名称 */
 		if(strncasecmp(Z_STRVAL_P(dmodule), Z_STRVAL_P(module), Z_STRLEN_P(module)) == 0) {
 			is_def_module = 1;
 		}
@@ -556,19 +592,20 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 		/* if (strncasecmp(Z_STRVAL_P(dcontroller), Z_STRVAL_P(controller), Z_STRLEN_P(controller)) == 0) {
 			is_def_ctr = 1;
 		} */
-
+		/* 注册controller */
 		ce = yaf_dispatcher_get_controller(app_dir, Z_STRVAL_P(module), Z_STRVAL_P(controller), Z_STRLEN_P(controller), is_def_module TSRMLS_CC);
 		if (!ce) {
 			return 0;
-		} else {
+		} else {	/* controller注册成功 */
 			zval  *action, *render, *ret = NULL;
 			char  *action_lower, *func_name, *view_dir;
 			uint  func_name_len;
 
 			yaf_controller_t *icontroller;
 
+			/* $icontroller = new Controller() */
 			MAKE_STD_ZVAL(icontroller);
-			object_init_ex(icontroller, ce);
+			object_init_ex(icontroller, ce);	
 
 			/* cause controller's constructor is a final method, so it must be a internal function
 			   do {
@@ -583,36 +620,47 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 			   }
 			   } while(0);
 			   */
+
+			/* Yaf_Controller_Abstract::__construct */
 			yaf_controller_construct(ce, icontroller, request, response, view, NULL TSRMLS_CC);
-			if (EG(exception)) {
+			if (EG(exception)) {	//异常处理
 				zval_ptr_dtor(&icontroller);
 				return 0;
 			}
 		
 			/* view template directory for application, please notice that view engine's directory has high priority */
+			/* 拼装模板文件夹的路径 */
 			if (is_def_module) {
-				spprintf(&view_dir, 0, "%s/%s", app_dir ,"views");
-			} else {
-				spprintf(&view_dir, 0, "%s/%s/%s/%s", app_dir, "modules", Z_STRVAL_P(module), "views");
+				/* /home/www/sample.com/application/views */
+				//spprintf(&view_dir, 0, "%s/%s", app_dir ,"views");
+				spprintf(&view_dir, 0, "%s%c%s", app_dir , DEFAULT_SLASH, "views");
+			} else { 
+				/* /home/www/sample.com/application/ modules / module1 /views */
+				//spprintf(&view_dir, 0, "%s/%s/%s/%s", app_dir, "modules", Z_STRVAL_P(module), "views");
+				spprintf(&view_dir, 0, "%s%c%s%c%s%c%s", app_dir, DEFAULT_SLASH, "modules", DEFAULT_SLASH, Z_STRVAL_P(module), DEFAULT_SLASH, "views");
 			}
 
 			if (YAF_G(view_directory)) {
 				efree(YAF_G(view_directory));
 			}
 			YAF_G(view_directory) = view_dir;
-
+			/* $icontroller->_name = Yaf_Request::$controller */
 			zend_update_property(ce, icontroller, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_NAME),	controller TSRMLS_CC);
 
+			/* $action = Yaf_Request::$action */
 			action		 = zend_read_property(request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), 1 TSRMLS_CC);
+			/* $action_lower = strtolower($action) */
 			action_lower = zend_str_tolower_dup(Z_STRVAL_P(action), Z_STRLEN_P(action));
 
 			/* because the action might call the forward to override the old action */
 			Z_ADDREF_P(action);
-
+			/* action名称也是全小写 */
 			func_name_len = spprintf(&func_name,  0, "%s%s", action_lower, "action");
 			efree(action_lower);
 
-			if (zend_hash_find(&((ce)->function_table), func_name, func_name_len + 1, (void **)&fptr) == SUCCESS) {
+			if (zend_hash_find(&((ce)->function_table), func_name, func_name_len + 1, (void **)&fptr) == SUCCESS) {	
+				/*	在注册的controller的函数表中查找成功 */
+
 				uint count = 0;
 				zval ***call_args = NULL;
 
@@ -621,16 +669,17 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 				executor = icontroller;
 				if (fptr->common.num_args) {
 					zval *method_name;
-
+					/* 获取当前method的参数和参数个数 */
 					yaf_dispatcher_get_call_parameters(request_ce, request, fptr, &call_args, &count TSRMLS_CC);
 					MAKE_STD_ZVAL(method_name);
 					ZVAL_STRINGL(method_name, func_name, func_name_len, 0);
-
+					/* 调用method并传参 */
 					call_user_function_ex(&(ce)->function_table, &icontroller, method_name, &ret, count, call_args, 1, NULL TSRMLS_CC);
 
 					efree(method_name);
 					efree(call_args);
 				} else {
+					/* 没有传递参数，直接调用method */
 					zend_call_method(&icontroller, ce, NULL, func_name, func_name_len, &ret, 0, NULL, NULL TSRMLS_CC);
 				}
 
@@ -641,7 +690,7 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 					zval_ptr_dtor(&icontroller);
 					return 0;
 				}
-
+				/* Why:返回值为false的情况下返回1呢 */
 				if ((Z_TYPE_P(ret) == IS_BOOL
 							&& !Z_BVAL_P(ret))) {
 					/* no auto-render */
@@ -652,7 +701,7 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 				}
 				zval_ptr_dtor(&ret);
 			} else if ((ce = yaf_dispatcher_get_action(app_dir, icontroller,
-							Z_STRVAL_P(module), is_def_module, Z_STRVAL_P(action), Z_STRLEN_P(action) TSRMLS_CC))
+							Z_STRVAL_P(module), is_def_module, Z_STRVAL_P(action), Z_STRLEN_P(action) TSRMLS_CC))	//在已经注册的里面查找失败后重新进行加载
 					&& (zend_hash_find(&(ce)->function_table, YAF_ACTION_EXECUTOR_NAME,
 							sizeof(YAF_ACTION_EXECUTOR_NAME), (void **)&fptr) == SUCCESS)) {
 				zval ***call_args;
@@ -661,17 +710,19 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 
 				efree(func_name);
 
+				/* $iaction = new Yaf_Action_Abstract() */
 				MAKE_STD_ZVAL(iaction);
 				object_init_ex(iaction, ce);
-
+				/* Yaf_Action_Abstract::__construct() */
 				yaf_controller_construct(ce, iaction, request, response, view, NULL TSRMLS_CC);
 				executor = iaction;
-
+				/* $iaction->_name = $controller */
 				zend_update_property(ce, iaction, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_NAME), controller TSRMLS_CC);
+				/* $iaction->_controller = $icontroller */
 				zend_update_property(ce, iaction, ZEND_STRL(YAF_ACTION_PROPERTY_NAME_CTRL), icontroller TSRMLS_CC);
 				zval_ptr_dtor(&icontroller);
 
-				if (fptr->common.num_args) {
+				if (fptr->common.num_args) {	//当前action有参数传递进来
 					zval *method_name = NULL;
 
 					yaf_dispatcher_get_call_parameters(request_ce, request, fptr, &call_args, &count TSRMLS_CC);
@@ -682,7 +733,7 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 
 					efree(method_name);
 					efree(call_args);
-				} else {
+				} else {	//无参数传递
 					zend_call_method_with_0_params(&iaction, ce, NULL, "execute", &ret);
 				}
 
@@ -710,18 +761,23 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 			if (executor) {
 				/* controller's property can override the Dispatcher's */
 				int auto_render = 1;
+				/* $render = Yaf_Action_Abstract::$yafAutoRender */
 				render = zend_read_property(ce, executor, ZEND_STRL(YAF_CONTROLLER_PROPERTY_NAME_RENDER), 1 TSRMLS_CC);
+				/* $instantly_flush = $this->_instantly_flush */
 				instantly_flush	= zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_FLUSH), 1 TSRMLS_CC);
 				if (render == EG(uninitialized_zval_ptr)) {
+					/* $render = $this->_auto_render */
 					render = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER), 1 TSRMLS_CC);
+					/* $auto_render = (bool)$render */
 					auto_render = Z_BVAL_P(render);
 				} else if (Z_TYPE_P(render) <= IS_BOOL && !Z_BVAL_P(render)) {
 					auto_render = 0;
 				}
 
-				if (auto_render) {
+				if (auto_render) {	//开启了自动渲染
 					ret = NULL;
-					if (!Z_BVAL_P(instantly_flush)) {
+					if (!Z_BVAL_P(instantly_flush)) {	//没开启，有输出的时候通过Yaf_Response_Abstract来返回给用户
+						/* 调用Yaf_Controller_Abstract::render()进行渲染模板，然后得到渲染后的结果 */
 						zend_call_method_with_1_params(&executor, ce, NULL, "render", &ret, action);
 						zval_ptr_dtor(&executor);
 
@@ -733,13 +789,14 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 							zval_ptr_dtor(&action);
 							return 0;
 						}
-
+						/* 渲染返回结果正常，将它放入Yaf_Response_Abstract::_body的值 */
 						if (Z_TYPE_P(ret) == IS_STRING && Z_STRLEN_P(ret)) {
 							yaf_response_alter_body(response, NULL, 0, Z_STRVAL_P(ret), Z_STRLEN_P(ret), YAF_RESPONSE_APPEND  TSRMLS_CC);
 						} 
 
 						zval_ptr_dtor(&ret);
-					} else {
+					} else {	//开启了直接输出给用户
+						/* 直接调用Yaf_Controller_Abstract::display渲染视图模板, 并直接输出渲染结果 */
 						zend_call_method_with_1_params(&executor, ce, NULL, "display", &ret, action);
 						zval_ptr_dtor(&executor);
 
@@ -768,7 +825,9 @@ int yaf_dispatcher_handle(yaf_dispatcher_t *dispatcher, yaf_request_t *request, 
 /* }}} */
 
 /** {{{ void yaf_dispatcher_exception_handler(yaf_dispatcher_t *dispatcher, yaf_request_t *request, yaf_response_t *response TSRMLS_DC)
-*/
+ *	在本文件中没用，在	yaf_exception.h中调用了
+ *	调用错误处理的controller和action进行错误处理
+ */
 void yaf_dispatcher_exception_handler(yaf_dispatcher_t *dispatcher, yaf_request_t *request, yaf_response_t *response TSRMLS_DC) {
 	zval *module, *controller, *action, *exception;
 	yaf_view_t  *view;
@@ -781,22 +840,25 @@ void yaf_dispatcher_exception_handler(yaf_dispatcher_t *dispatcher, yaf_request_
 
 	MAKE_STD_ZVAL(controller);
 	MAKE_STD_ZVAL(action);
-
+	/* $module = Yaf_Request_Abstract::$module */
 	module = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
-
+	/* Yaf_Request_Abstract::$moduel不合法，使用默认的moduel了来替换 */
 	if (!module || Z_TYPE_P(module) != IS_STRING || !Z_STRLEN_P(module)) {
 		module = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), 1 TSRMLS_CC);
 		zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), module TSRMLS_CC);
 	}
-
+	/* $controller = "Error" */
 	ZVAL_STRING(controller, YAF_ERROR_CONTROLLER, 1);
+	/* $action = "error" */
 	ZVAL_STRING(action, 	YAF_ERROR_ACTION, 1);
 
 	exception = EG(exception);
 	EG(exception) = NULL;
-
+	/* Yaf_Request_Abstract::$controller = $controller */
 	zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), controller TSRMLS_CC);
+	/* Yaf_Request_Abstract::$action = $action */
 	zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), action TSRMLS_CC);
+	/* Yaf_Request_Abstract::$_exception = $exception */
 	zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_EXCEPTION), exception TSRMLS_CC);
 
 	Z_DELREF_P(controller);
@@ -810,14 +872,14 @@ void yaf_dispatcher_exception_handler(yaf_dispatcher_t *dispatcher, yaf_request_
 		EG(exception) = exception;
 		return;
 	}
-	yaf_request_set_dispatched(request, 0 TSRMLS_CC);
+	yaf_request_set_dispatched(request, 0 TSRMLS_CC);	/* Yaf_Request::dispatched = 0 */
 
-	view = yaf_dispatcher_init_view(dispatcher, NULL, NULL TSRMLS_CC);
+	view = yaf_dispatcher_init_view(dispatcher, NULL, NULL TSRMLS_CC);		//实例化视图引擎类
 	if (!view) {
 		return;
 	}
 
-	if (!yaf_dispatcher_handle(dispatcher, request, response, view TSRMLS_CC)) {
+	if (!yaf_dispatcher_handle(dispatcher, request, response, view TSRMLS_CC)) {	//进行controller文件的加载、然后执行action，最后根据配置来进行模板渲染以及输出	
 		if (EG(exception) 
 				&& instanceof_function(Z_OBJCE_P(EG(exception)), 
 					yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_NOTFOUND_CONTROLLER)] TSRMLS_CC)) {
@@ -840,6 +902,7 @@ void yaf_dispatcher_exception_handler(yaf_dispatcher_t *dispatcher, yaf_request_
  */
 int yaf_dispatcher_route(yaf_dispatcher_t *dispatcher, yaf_request_t *request TSRMLS_DC) {
 	zend_class_entry *router_ce;
+	/* $router = $this->_router */
 	yaf_router_t *router = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ROUTER), 1 TSRMLS_CC);
 	if (IS_OBJECT == Z_TYPE_P(router)) {
 		if ((router_ce = Z_OBJCE_P(router)) == yaf_router_ce) {
@@ -865,12 +928,14 @@ yaf_response_t * yaf_dispatcher_dispatch(yaf_dispatcher_t *dispatcher TSRMLS_DC)
 	zval *return_response, *plugins, *view;
 	yaf_response_t *response;
 	yaf_request_t *request;
-	uint nesting = YAF_G(forward_limit);
-
+	uint nesting = YAF_G(forward_limit);	//forward最大嵌套深度
+	/* 进行一些列初始化，初始化成员变量并且返回类自身的实例 */
 	response = yaf_response_instance(NULL, sapi_module.name TSRMLS_CC);
+	/* Yaf_Request $request = $this->_request */
 	request	 = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_REQUEST), 1 TSRMLS_CC);
+	/* Yaf_Plugin $plugins = $this->_plugins */
 	plugins	 = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_PLUGINS), 1 TSRMLS_CC);
-
+	/* $request也就是$this->_request的值应该为一个对象k */
 	if (!request || IS_OBJECT != Z_TYPE_P(request)) {
 		yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Expect a %s instance", yaf_request_ce->name);
 		zval_ptr_dtor(&response);
@@ -878,45 +943,50 @@ yaf_response_t * yaf_dispatcher_dispatch(yaf_dispatcher_t *dispatcher TSRMLS_DC)
 	}
 
 	/* route request */
-	if (!yaf_request_is_routed(request TSRMLS_CC)) {
-		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_ROUTESTARTUP, request, response);
-		YAF_EXCEPTION_HANDLE(dispatcher, request, response);
-		if (!yaf_dispatcher_route(dispatcher, request TSRMLS_CC)) {
+	if (!yaf_request_is_routed(request TSRMLS_CC)) {	/* 还没有开始执行路由 */
+		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_ROUTESTARTUP, request, response);	//routerstartup调用并执行插件
+		YAF_EXCEPTION_HANDLE(dispatcher, request, response);	//异常处理
+		if (!yaf_dispatcher_route(dispatcher, request TSRMLS_CC)) {	//执行路由
 			yaf_trigger_error(YAF_ERR_ROUTE_FAILED TSRMLS_CC, "Routing request failed");
 			YAF_EXCEPTION_HANDLE_NORET(dispatcher, request, response);
 			zval_ptr_dtor(&response);
 			return NULL;
 		}
+		/* 进行module/controller/action名的检验以及响应的转换 */
 		yaf_dispatcher_fix_default(dispatcher, request TSRMLS_CC);
-		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_ROUTESHUTDOWN, request, response);
-		YAF_EXCEPTION_HANDLE(dispatcher, request, response);
-		(void)yaf_request_set_routed(request, 1 TSRMLS_CC);
+		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_ROUTESHUTDOWN, request, response);	//routershutdown调用并执行插件
+		YAF_EXCEPTION_HANDLE(dispatcher, request, response);	//异常处理
+		/* Yaf_Request::$routed = 1 */
+		(void)yaf_request_set_routed(request, 1 TSRMLS_CC);	
 	} else {
+		/* 进行module/controller/action名的检验以及响应的转换 */
 		yaf_dispatcher_fix_default(dispatcher, request TSRMLS_CC);
 	}
 
-	YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_LOOPSTARTUP, request, response);
-	YAF_EXCEPTION_HANDLE(dispatcher, request, response);
+	YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_LOOPSTARTUP, request, response);	//dispatchloopstartup调用并执行插件
+	YAF_EXCEPTION_HANDLE(dispatcher, request, response);	//异常处理
 
-	view = yaf_dispatcher_init_view(dispatcher, NULL, NULL TSRMLS_CC);
+	view = yaf_dispatcher_init_view(dispatcher, NULL, NULL TSRMLS_CC);		//在dispatcher中实例化视图引擎
 	if (!view) {
 		return NULL;
 	}
 
+	/* 进行路由的分发，其中包含了forward操作 */
 	do {
-		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_PREDISPATCH, request, response);
-		if (!yaf_dispatcher_handle(dispatcher, request, response, view TSRMLS_CC)) {
+		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_PREDISPATCH, request, response);		//predispatch调用并执行插件
+		if (!yaf_dispatcher_handle(dispatcher, request, response, view TSRMLS_CC)) {	//进行controller文件的加载、然后执行action，最后根据配置来进行模板渲染以及输出	
 			YAF_EXCEPTION_HANDLE(dispatcher, request, response);
 			zval_ptr_dtor(&response);
 			return NULL;
 		}
+		/* 进行module/controller/action名的检验以及响应的转换 */
 		yaf_dispatcher_fix_default(dispatcher, request TSRMLS_CC);
-		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_POSTDISPATCH, request, response);
-		YAF_EXCEPTION_HANDLE(dispatcher, request, response);
+		YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_POSTDISPATCH, request, response);	//postdispatch调用并执行插件
+		YAF_EXCEPTION_HANDLE(dispatcher, request, response);							//捕获异常
 	} while (--nesting > 0 && !yaf_request_is_dispatched(request TSRMLS_CC));
 
-	YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_LOOPSHUTDOWN, request, response);
-	YAF_EXCEPTION_HANDLE(dispatcher, request, response);
+	YAF_PLUGIN_HANDLE(plugins, YAF_PLUGIN_HOOK_LOOPSHUTDOWN, request, response);		//dispatchloopshutdown调用并执行插件
+	YAF_EXCEPTION_HANDLE(dispatcher, request, response);								//捕获异常
 
 	if (0 == nesting && !yaf_request_is_dispatched(request TSRMLS_CC)) {
 		yaf_trigger_error(YAF_ERR_DISPATCH_FAILED TSRMLS_CC, "The max dispatch nesting %ld was reached", YAF_G(forward_limit));
@@ -924,10 +994,11 @@ yaf_response_t * yaf_dispatcher_dispatch(yaf_dispatcher_t *dispatcher TSRMLS_DC)
 		zval_ptr_dtor(&response);
 		return NULL;
 	}
-
+	/* $return_response = $this->_return_response */
 	return_response = zend_read_property(yaf_dispatcher_ce, dispatcher, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RETURN), 1 TSRMLS_CC);
 
 	if (!Z_BVAL_P(return_response)) {
+		/* 输出response中存在的响应信息，最后清除响应信息 */
 		(void)yaf_response_send(response TSRMLS_CC);
 		yaf_response_clear_body(response, NULL, 0 TSRMLS_CC);
 	}
@@ -955,7 +1026,8 @@ PHP_METHOD(yaf_dispatcher, __wakeup) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setErrorHandler(string $callbacak[, int $error_types = E_ALL | E_STRICT ] )
-*/
+ *	设置错误处理函数, 一般在appcation.throwException关闭的情况下, Yaf会在出错的时候触发错误, 这个时候, 如果设置了错误处理函数, 则会把控制交给错误处理函数处理.
+ */
 PHP_METHOD(yaf_dispatcher, setErrorHandler) {
 	zval *callback, *error_type = NULL;
 	zval *params[2]	 = {0};
@@ -971,6 +1043,7 @@ PHP_METHOD(yaf_dispatcher, setErrorHandler) {
 	}
 
 	ZVAL_STRING(&function, "set_error_handler", 0);
+	/* 回调错误处理函数 */
 	if (call_user_function(EG(function_table), NULL, &function, return_value, ZEND_NUM_ARGS(), params TSRMLS_CC) == FAILURE) {
 		if (return_value) {
 			zval_dtor(return_value);
@@ -982,31 +1055,38 @@ PHP_METHOD(yaf_dispatcher, setErrorHandler) {
 	if (return_value) {
 		zval_dtor(return_value);
 	}
-
+	/* return $this */
 	RETURN_ZVAL(getThis(), 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::disableView()
-*/
+ *	关闭自动Render. 默认是开启的, 在动作执行完成以后, Yaf会自动render以动作名命名的视图模板文件.
+ */
 PHP_METHOD(yaf_dispatcher, disableView) {
 	yaf_dispatcher_t *self = getThis();
+	/* $this->_auto_render = 0 */
 	zend_update_property_bool(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER), 0 TSRMLS_CC);
+	/* return $this */
 	RETURN_ZVAL(self, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::enableView()
-*/
+ *	开启自动Render. 默认是开启的, 在动作执行完成以后, Yaf会自动render以动作名命名的视图模板文件.
+ */
 PHP_METHOD(yaf_dispatcher, enableView) {
 	yaf_dispatcher_t *self = getThis();
+	/* $this->_auto_render = 1 */
 	zend_update_property_bool(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER), 1 TSRMLS_CC);
+	/* return $this */
 	RETURN_ZVAL(self, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::returnResponse()
-*/
+ *	是否返回Response对象, 如果启用, 则Response对象在分发完成以后不会自动输出给请求端, 而是交给程序员自己控制输出.
+ */
 PHP_METHOD(yaf_dispatcher, returnResponse) {
 	zend_bool auto_response;
 	yaf_dispatcher_t *self = getThis();
@@ -1016,16 +1096,20 @@ PHP_METHOD(yaf_dispatcher, returnResponse) {
 	}
 
 	if (ZEND_NUM_ARGS()) {
+		/* $this->_return_response = $auto_response ? 1 : 0; */
 		zend_update_property_bool(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RETURN), (auto_response)? 1:0 TSRMLS_CC);
+		/* return $this */
 		RETURN_ZVAL(self, 1, 0);
 	} else {
+		/* return (boolean)($this->_return_response) */
 		RETURN_BOOL(Z_BVAL_P(zend_read_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RETURN), 1 TSRMLS_CC)));
 	}
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::flushInstantly(bool $flag)
-*/
+ *	切换自动响应. 在Yaf_Dispatcher::enableView()的情况下, 会使得Yaf_Dispatcher调用Yaf_Controller_Abstract::display方法, 直接输出响应给请求端
+ */
 PHP_METHOD(yaf_dispatcher, flushInstantly) {
 	zend_bool instantly_flush;
 	yaf_dispatcher_t *self = getThis();
@@ -1035,16 +1119,20 @@ PHP_METHOD(yaf_dispatcher, flushInstantly) {
 	}
 
 	if (ZEND_NUM_ARGS()) {
+		/* $this->_instantly_flush = $instantly_flush ? 1 : 0; */
 		zend_update_property_bool(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_FLUSH), (instantly_flush)? 1:0 TSRMLS_CC);
+		/* return $this */
 		RETURN_ZVAL(self, 1, 0);
 	} else {
+		/* return (boolean)($this->_instantly_flush) */
 		RETURN_BOOL(Z_BVAL_P(zend_read_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_FLUSH), 1 TSRMLS_CC)));		
 	}
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::registerPlugin(Yaf_Plugin_Abstract $plugin)
-*/
+ *	注册一个插件.成功返回Yaf_Dispatcher, 失败返回FALSE
+ */
 PHP_METHOD(yaf_dispatcher, registerPlugin) {
 	zval *plugin, *plugins;
 	yaf_dispatcher_t *self = getThis();
@@ -1052,23 +1140,24 @@ PHP_METHOD(yaf_dispatcher, registerPlugin) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &plugin) == FAILURE) {
 		return;
 	}
-
+	/* 参数必须是继承自Yaf_Plugin_Abstract的类的实例 */
 	if (Z_TYPE_P(plugin) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(plugin), yaf_plugin_ce TSRMLS_CC)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a %s instance", yaf_plugin_ce->name);
 		RETURN_FALSE;
 	}
-
+	/* $plugins = $this->_plugins */
 	plugins = zend_read_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_PLUGINS), 1 TSRMLS_CC);
-
+	/* $plugins[] = $plugin */
 	Z_ADDREF_P(plugin);
 	add_next_index_zval(plugins, plugin);
-
+	/* return $this */
 	RETVAL_ZVAL(self, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setRequest(Yaf_Request_Abstract $request)
-*/
+ *	设置请求对象,成功返回Yaf_Dispatcher, 失败返回FALSE	
+ */
 PHP_METHOD(yaf_dispatcher, setRequest) {
 	yaf_request_t	 *request;
 	yaf_dispatcher_t *self;
@@ -1076,7 +1165,7 @@ PHP_METHOD(yaf_dispatcher, setRequest) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &request) == FAILURE) {
 		return;
 	}
-
+	/* 传递进来的参数必须是继承自Yaf_Request_Abstract的类的实例 */
 	if (IS_OBJECT != Z_TYPE_P(request)
 		   || !instanceof_function(Z_OBJCE_P(request), yaf_request_ce TSRMLS_CC))	{
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expects a %s instance", yaf_request_ce->name);
@@ -1084,6 +1173,7 @@ PHP_METHOD(yaf_dispatcher, setRequest) {
 	}
 
 	self = getThis();
+	/* $this->_request = $request */
 	if (yaf_dispatcher_set_request(self, request TSRMLS_CC)) {
 		RETURN_ZVAL(self, 1, 0);
 	}
@@ -1093,7 +1183,8 @@ PHP_METHOD(yaf_dispatcher, setRequest) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::getInstance(void)
-*/
+ *	获取当前的Yaf_Dispatcher实例,单例
+ */
 PHP_METHOD(yaf_dispatcher, getInstance) {
 	yaf_dispatcher_t *dispatcher = yaf_dispatcher_instance(NULL TSRMLS_CC);
 	RETURN_ZVAL(dispatcher, 1, 0);
@@ -1101,22 +1192,27 @@ PHP_METHOD(yaf_dispatcher, getInstance) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::getRouter(void)
-*/
+ *	获取路由器,返回Yaf_Router实例
+ */
 PHP_METHOD(yaf_dispatcher, getRouter) {
+	/* $router = $this->_router */
 	yaf_router_t *router = zend_read_property(yaf_dispatcher_ce, getThis(), ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_ROUTER), 1 TSRMLS_CC);
 	RETURN_ZVAL(router, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::getRequest(void)
-*/
+ *	获取当前的请求实例,返回Yaf_Request_Abstract实例
+ */
 PHP_METHOD(yaf_dispatcher, getRequest) {
+	/* $request = $this->_request */
 	yaf_request_t *request = zend_read_property(yaf_dispatcher_ce, getThis(), ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_REQUEST), 1 TSRMLS_CC);
 	RETURN_ZVAL(request, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::getApplication(void)
+ *	获取当前的Yaf_Application实例
 */
 PHP_METHOD(yaf_dispatcher, getApplication) {
 	PHP_MN(yaf_application_app)(INTERNAL_FUNCTION_PARAM_PASSTHRU);
@@ -1124,7 +1220,8 @@ PHP_METHOD(yaf_dispatcher, getApplication) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::dispatch(yaf_request_t $request)
-*/
+ *	开始处理流程, 一般的不需要用户调用此方法, Yaf_Application::run 会自动调用此方法.
+ */
 PHP_METHOD(yaf_dispatcher, dispatch) {
 	yaf_request_t 	*request;
 	yaf_response_t 	*response;
@@ -1135,7 +1232,9 @@ PHP_METHOD(yaf_dispatcher, dispatch) {
 	}
 
 	self = getThis();
+	/* $this->_request = $request */
 	zend_update_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_REQUEST), request TSRMLS_CC);
+	/* 进行分发执行过程，执行成功返回Yaf_Response_Abstract实例 */
 	if ((response = yaf_dispatcher_dispatch(self TSRMLS_CC))) {
 		RETURN_ZVAL(response, 1, 1);
 	}
@@ -1145,13 +1244,17 @@ PHP_METHOD(yaf_dispatcher, dispatch) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::throwException(bool $flag=0)
-*/
+ *	切换在Yaf出错的时候抛出异常, 还是触发错误.
+ */
 PHP_METHOD(yaf_dispatcher, throwException) {
 	zend_bool flag;
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|b", &flag) == FAILURE) {
 		return;
 	}
-
+	/**
+	 *	在传递了参数的情况下，通过参数的boolean值给YAF_G(throw_exception)赋值
+	 *	没有传递参数的情况下，返回YAF_G(throw_exception)的boolean值
+	 */
 	if (ZEND_NUM_ARGS()) {
 		YAF_G(throw_exception) = flag? 1: 0;
 		RETURN_ZVAL(getThis(), 1, 0);
@@ -1162,13 +1265,18 @@ PHP_METHOD(yaf_dispatcher, throwException) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::catchException(bool $flag=0)
-*/
+ *	在ap.dispatcher.throwException开启的状态下, 是否启用默认捕获异常机制
+ *	当然,也可以在配置文件中使用ap.dispatcher.catchException=$switch达到同样的效果, 默认的是开启状态.
+ */
 PHP_METHOD(yaf_dispatcher, catchException) {
 	zend_bool flag;
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|b", &flag) == FAILURE) {
 		return;
 	}
-
+	/**
+	 *	传递了参数则通过判断参数的值来给YAF_G(catch_exception)赋值，最后返回$this
+	 *	没有传递参数则返回YAF_G(catch_exception)的值
+	 */
 	if (ZEND_NUM_ARGS()) { 
 		YAF_G(catch_exception) = flag? 1: 0;
 		RETURN_ZVAL(getThis(), 1, 0);
@@ -1179,6 +1287,7 @@ PHP_METHOD(yaf_dispatcher, catchException) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::autoRender(int $flag)
+ *	开启/关闭自动渲染功能. 在开启的情况下(Yaf默认开启), Action执行完成以后, Yaf会自动调用View引擎去渲染该Action对应的视图模板.
  */
 PHP_METHOD(yaf_dispatcher, autoRender) {
 	zend_bool flag;
@@ -1189,16 +1298,20 @@ PHP_METHOD(yaf_dispatcher, autoRender) {
 	}
 
 	if (ZEND_NUM_ARGS()) {
+		/* $this->_auto_render = $flag ? 1 : 0; */
 		zend_update_property_bool(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER), flag? 1 : 0 TSRMLS_CC);
+		/* return $this; */
 		RETURN_ZVAL(self, 1, 0);
 	} else {
+		/* 没传参数：根据$this->_auto_render的值返回true或者false */
 		RETURN_BOOL(Z_BVAL_P(zend_read_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_RENDER), 1 TSRMLS_CC)));
 	} 
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::initView(string $tpl_dir, array $options = NULL)
-*/
+ *	初始化视图引擎, 因为Yaf采用延迟实例化视图引擎的策略, 所以只有在使用前调用此方法, 视图引擎才会被实例化
+ */
 PHP_METHOD(yaf_dispatcher, initView) {
 	yaf_view_t 	*view 	 = NULL;
 	zval 		*tpl_dir = NULL;
@@ -1218,7 +1331,8 @@ PHP_METHOD(yaf_dispatcher, initView) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setView(Yaf_View_Interface $view)
-*/
+ *	设置视图引擎
+ */
 PHP_METHOD(yaf_dispatcher, setView) {
 	yaf_view_t		*view;
 	yaf_dispatcher_t *self = getThis();
@@ -1226,10 +1340,12 @@ PHP_METHOD(yaf_dispatcher, setView) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &view) == FAILURE) {
 		return;
 	}
-
+	/* view必须是继承自Yaf_View_Interface的对象 */
 	if (view && IS_OBJECT == Z_TYPE_P(view)
 			&& instanceof_function(Z_OBJCE_P(view), yaf_view_interface_ce TSRMLS_CC)) {
+		/* $this->_view = $view */
 		zend_update_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_VIEW), view TSRMLS_CC);
+		/* return $this */
 		RETURN_ZVAL(self, 1, 0);
 	}
 
@@ -1238,7 +1354,8 @@ PHP_METHOD(yaf_dispatcher, setView) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setDefaultModule(string $name)
-*/
+ *	设置路由的默认模块, 如果在路由结果中不包含模块信息, 则会使用此默认模块作为路由模块结果
+ */
 PHP_METHOD(yaf_dispatcher, setDefaultModule) {
 	zval *module;
 	zval *self = getThis();
@@ -1246,16 +1363,17 @@ PHP_METHOD(yaf_dispatcher, setDefaultModule) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &module) == FAILURE) {
 		return;
 	}
-
+	/* 必须是合法字符串，并且是合法的module名字 */
 	if (IS_STRING == Z_TYPE_P(module) && Z_STRLEN_P(module)
 			&& yaf_application_is_module_name(Z_STRVAL_P(module), Z_STRLEN_P(module) TSRMLS_CC)) {
 		zval *module_std;
 		MAKE_STD_ZVAL(module_std);
+		/* 又是先小写，然后转成大写，为啥呢 */
 		ZVAL_STRING(module_std, zend_str_tolower_dup(Z_STRVAL_P(module), Z_STRLEN_P(module)), 0);
 		*Z_STRVAL_P(module_std) = toupper(*Z_STRVAL_P(module_std));
 		zend_update_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), module_std TSRMLS_CC);
 		zval_ptr_dtor(&module_std);
-
+		/* return $this; */
 		RETURN_ZVAL(self, 1, 0);
 	}
 
@@ -1264,7 +1382,8 @@ PHP_METHOD(yaf_dispatcher, setDefaultModule) {
 /* }}} */
 
 /** {{{ proto public Yaf_Dispatcher::setDefaultController(string $name)
-*/
+ *	设置路由的默认控制器, 如果在路由结果中不包含控制器信息, 则会使用此默认控制器作为路由控制器结果
+ */
 PHP_METHOD(yaf_dispatcher, setDefaultController) {
 	zval *controller;
 	zval *self = getThis();
@@ -1272,14 +1391,17 @@ PHP_METHOD(yaf_dispatcher, setDefaultController) {
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &controller) == FAILURE) {
 		return;
 	}
-
+	/* 必须是合法字符串 */
 	if (IS_STRING == Z_TYPE_P(controller) && Z_STRLEN_P(controller)) {
 		zval *controller_std;
 		MAKE_STD_ZVAL(controller_std);
+		/* 将名称转换成全部小写 */
+		/* $controller_std = strtolower($controller) */
 		ZVAL_STRING(controller_std, zend_str_tolower_dup(Z_STRVAL_P(controller), Z_STRLEN_P(controller)), 0);
+		/* Why:再转换成大写，这个是为啥 */
 		*Z_STRVAL_P(controller_std) = toupper(*Z_STRVAL_P(controller_std));
 		zend_update_property(yaf_dispatcher_ce, self, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_CONTROLLER), controller_std TSRMLS_CC);
-
+		/* return $this */
 		RETURN_ZVAL(self, 1, 0);
 	}
 

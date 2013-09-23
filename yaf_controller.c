@@ -217,6 +217,7 @@ int yaf_controller_display(yaf_controller_t *instance, char *action_name, int le
 /* }}} */
 
 /** {{{ int yaf_controller_construct(zend_class_entry *ce, yaf_controller_t *self, yaf_request_t *request, yaf_response_t *responseew_t *view, zval *args TSRMLS_DC)
+ *	Yaf_Controller_Abstract::__construct
  */
 int yaf_controller_construct(zend_class_entry *ce, yaf_controller_t *self, yaf_request_t *request, yaf_response_t *response, yaf_view_t *view, zval *args TSRMLS_DC) {
 	zval *module;

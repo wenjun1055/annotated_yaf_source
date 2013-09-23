@@ -25,7 +25,7 @@
 #define YAF_DISPATCHER_PROPERTY_NAME_INSTANCE	"_instance"
 #define	YAF_DISPATCHER_PROPERTY_NAME_RENDER		"_auto_render"
 #define	YAF_DISPATCHER_PROPERTY_NAME_RETURN		"_return_response"
-#define	YAF_DISPATCHER_PROPERTY_NAME_FLUSH		"_instantly_flush"
+#define	YAF_DISPATCHER_PROPERTY_NAME_FLUSH		"_instantly_flush"  //标示着, 是否在有输出的时候, 直接响应给客户端, 不写入Yaf_Response_Abstract对象.
 #define	YAF_DISPATCHER_PROPERTY_NAME_ARGS		"_invoke_args"
 
 #define YAF_DISPATCHER_PROPERTY_NAME_MODULE		"_default_module"
@@ -45,6 +45,7 @@
 #define YAF_PLUGIN_HOOK_LOOPSHUTDOWN				"dispatchloopshutdown"
 #define YAF_PLUGIN_HOOK_PRERESPONSE				"preresponse"
 
+/* 调用插件 */
 #define YAF_PLUGIN_HANDLE(p, n, request, response) \
 	do { \
 		if (!ZVAL_IS_NULL(p)) { \
