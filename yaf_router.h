@@ -24,8 +24,8 @@
 #define YAF_ROUTER_DEFAULT_MODULE	  	"Index"
 #define YAF_DEFAULT_EXT 		 	   	"php"
 
-#define YAF_ROUTER_PROPERTY_NAME_ROUTERS 		"_routes"
-#define YAF_ROUTER_PROPERTY_NAME_CURRENT_ROUTE	"_current"
+#define YAF_ROUTER_PROPERTY_NAME_ROUTERS 		"_routes"        //路由器已有的路由协议栈, 默认的栈底总是名为"default"的Yaf_Route_Static路由协议的实例.
+#define YAF_ROUTER_PROPERTY_NAME_CURRENT_ROUTE	"_current"   //在路由成功后, 路由生效的路由协议名
 
 extern zend_class_entry * yaf_router_ce;
 
