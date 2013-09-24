@@ -18,6 +18,19 @@
 
 zend_class_entry *yaf_route_map_ce;
 
+/**
+ * 	对于请求request_uri为"/ap/foo/bar"
+ * 	base_uri为"/ap"
+ * 	则最后参加路由的request_uri为"/foo/bar"
+ * 	然后, 通过对URL分段, 得到如下分节
+ * 	foo, bar
+ * 	组合在一起以后, 得到路由结果foo_bar
+ *
+ * 	然后根据在构造Yaf_Route_Map的时候, 是否指明了控制器优先,
+ * 	如果没有, 则把结果当做是动作的路由结果
+ *  否则, 则认为是控制器的路由结果
+ * 	默认的, 控制器优先为FALSE
+ */
 #define YAF_ROUTE_MAP_VAR_NAME_DELIMETER	"_delimeter"
 #define YAF_ROUTE_MAP_VAR_NAME_CTL_PREFER	"_ctl_router"
 
@@ -30,6 +43,7 @@ ZEND_END_ARG_INFO()
 /* }}} */
 
 /* {{{ yaf_route_t * yaf_route_map_instance(yaf_route_t *this_ptr, zend_bool controller_prefer, char *delim, uint len TSRMLS_DC)
+ *	在__construct中为成员变量设置值
  */
 yaf_route_t * yaf_route_map_instance(yaf_route_t *this_ptr, zend_bool controller_prefer, char *delim, uint len TSRMLS_DC) {
 	yaf_route_t *instance;
@@ -42,11 +56,13 @@ yaf_route_t * yaf_route_map_instance(yaf_route_t *this_ptr, zend_bool controller
 	}
 
 	if (controller_prefer) {
+		/* $this->_ctl_router = true */
 		zend_update_property_bool(yaf_route_map_ce, instance,
 				ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_CTL_PREFER), 1 TSRMLS_CC);
 	}
 
 	if (delim && len) {
+		/* $this->_delimeter = $delim */
 		zend_update_property_stringl(yaf_route_map_ce, instance,
 				ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_DELIMETER), delim, len TSRMLS_CC);
 	}
@@ -65,30 +81,51 @@ int yaf_route_map_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC) {
 
 	smart_str route_result = {0};
 
+	/* $zuri = Yaf_Request_Abstract::$uri */
 	zuri 	 = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_URI), 1 TSRMLS_CC);
+	/* $base_uri =  Yaf_Request_Abstract::$_base_uri */
 	base_uri = zend_read_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_BASE), 1 TSRMLS_CC);
-
+	/* $ctl_prefer = $this->_ctl_router */
 	ctl_prefer = zend_read_property(yaf_route_map_ce, route, ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_CTL_PREFER), 1 TSRMLS_CC);
+	/* $delimer = $this->_delimeter */
 	delimer	   = zend_read_property(yaf_route_map_ce, route, ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_DELIMETER), 1 TSRMLS_CC);
 
+	/* 得到真正的request_uri部分 */
 	if (base_uri && IS_STRING == Z_TYPE_P(base_uri)
-			&& !strncasecmp(Z_STRVAL_P(zuri), Z_STRVAL_P(base_uri), Z_STRLEN_P(base_uri))) {
+			&& !strncasecmp(Z_STRVAL_P(zuri), Z_STRVAL_P(base_uri), Z_STRLEN_P(base_uri))) {	/* 设置了base_uri，并且base_uri的确在zuri中存在 */
+		/* $req_uri = substr($zuri, strlen($base_uri)) */
 		req_uri  = estrdup(Z_STRVAL_P(zuri) + Z_STRLEN_P(base_uri));
-	} else {
+	} else {	/* 没有设置base_uri或者在zuri中不包含base_uri */
+		/* $req_uri = $zuri */
 		req_uri  = estrdup(Z_STRVAL_P(zuri));
 	}
 
+	/**
+	 *	for http://yourdomain.com/user/list/_/foo/22
+ 	 * 	route will result in following values:
+ 	 *	array(
+     *		"action" => "user_list",
+	 *	)
+	 *
+	 *	and request parameters:
+	 *	array(
+  	 *		"foo"   => 22,
+	 *	)
+ 	 */
+
 	if (Z_TYPE_P(delimer) == IS_STRING
-			&& Z_STRLEN_P(delimer)) {
-		if ((query_str = strstr(req_uri, Z_STRVAL_P(delimer))) != NULL
+			&& Z_STRLEN_P(delimer)) {	//设置了$this->_delimeter
+		if ((query_str = strstr(req_uri, Z_STRVAL_P(delimer))) != NULL 	
 			&& *(query_str - 1) == '/') {
+			/* $tmp = "/user/list/" */
 			tmp  = req_uri;
+			/* $rest = "/foo/22" */
 			rest = query_str + Z_STRLEN_P(delimer);
-			if (*rest == '\0') {
+			if (*rest == '\0') {	/* $rest = "" */
 				req_uri 	= estrndup(req_uri, query_str - req_uri);
 				query_str 	= NULL;
 				efree(tmp);
-			} else if (*rest == '/') {
+			} else if (*rest == '/') {	/* $rest = "/foo/22" */
 				req_uri 	= estrndup(req_uri, query_str - req_uri);
 				query_str   = estrdup(rest);
 				efree(tmp);
@@ -97,7 +134,10 @@ int yaf_route_map_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC) {
 			}
 		}
 	}
-
+	/** 
+	 *	#define YAF_ROUTER_URL_DELIMIETER    "/" 
+	 *	通过/分割，然后再把分割后的记过通过_连接起来
+	 */
 	seg = php_strtok_r(req_uri, YAF_ROUTER_URL_DELIMIETER, &ptrptr);
 	while (seg) {
 		seg_len = strlen(seg);
@@ -110,15 +150,18 @@ int yaf_route_map_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC) {
 
 	if (route_result.len) {
 		if (Z_BVAL_P(ctl_prefer)) {
+			/* Yaf_Request_Abstract::$controller = route_result.c */
 			zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), route_result.c, route_result.len - 1 TSRMLS_CC);
 		} else {
+			/* Yaf_Request_Abstract::$action = route_result.c */
 			zend_update_property_stringl(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), route_result.c, route_result.len - 1 TSRMLS_CC);
 		}
 		efree(route_result.c);
 	}
 
-	if (query_str) {
+	if (query_str) {	/* 有参数传递 */
 		params = yaf_router_parse_parameters(query_str TSRMLS_CC);
+		/* 将得到的参数的键值对添加到Yaf_Request_Abstract::$params中 */
 		(void)yaf_request_set_params_multi(request, params TSRMLS_CC);
 		zval_ptr_dtor(&params);
 		efree(query_str);
@@ -134,7 +177,7 @@ int yaf_route_map_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC) {
 */
 PHP_METHOD(yaf_route_map, route) {
 	yaf_request_t *request;
-
+	/* 接收Yaf_Request_Abstract的实例 */
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "O", &request, yaf_request_ce) == FAILURE) {
 		return;
 	} else {
@@ -175,11 +218,16 @@ YAF_STARTUP_FUNCTION(route_map) {
 	zend_class_entry ce;
 
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Route_Map", "Yaf\\Route\\Map", yaf_route_map_methods);
+	/* final class Yaf_Route_Map implements Yaf_Route_Interface */
 	yaf_route_map_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
 	zend_class_implements(yaf_route_map_ce TSRMLS_CC, 1, yaf_route_ce);
 
 	yaf_route_map_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/**
+	 *	protected $_ctl_router = false;
+	 *	protected $_delimeter = null;
+	 */
 	zend_declare_property_bool(yaf_route_map_ce, ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_CTL_PREFER), 0, ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_route_map_ce, ZEND_STRL(YAF_ROUTE_MAP_VAR_NAME_DELIMETER),  ZEND_ACC_PROTECTED TSRMLS_CC);
 
