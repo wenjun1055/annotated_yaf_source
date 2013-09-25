@@ -36,24 +36,37 @@ ZEND_END_ARG_INFO()
 int yaf_route_simple_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC) {
 	zval *module, *controller, *action;
 	zval *nmodule, *ncontroller, *naction;
-
+	/** 
+	 *	$nmoduel 	 = $this->moduel 
+	 *	$ncontroller = $this->controller
+	 *	$naction 	 = $this->action
+	 */
 	nmodule 	= zend_read_property(yaf_route_simple_ce, route, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_MODULE), 1 TSRMLS_CC);
 	ncontroller = zend_read_property(yaf_route_simple_ce, route, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_CONTROLLER), 1 TSRMLS_CC);
 	naction 	= zend_read_property(yaf_route_simple_ce, route, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_ACTION), 1 TSRMLS_CC);
 
 	/* if there is no expect parameter in supervars, then null will be return */
+	/**
+	 *	$moduel 	= $_GET[$nmodule]
+	 *	$controller = $_GET[$ncontroller]
+	 *	$action = $_GET[$naction]
+	 */
 	module 		= yaf_request_query(YAF_GLOBAL_VARS_GET, Z_STRVAL_P(nmodule), Z_STRLEN_P(nmodule) TSRMLS_CC);
 	controller 	= yaf_request_query(YAF_GLOBAL_VARS_GET, Z_STRVAL_P(ncontroller), Z_STRLEN_P(ncontroller) TSRMLS_CC);
 	action 		= yaf_request_query(YAF_GLOBAL_VARS_GET, Z_STRVAL_P(naction), Z_STRLEN_P(naction) TSRMLS_CC);
 
-	if (ZVAL_IS_NULL(module) && ZVAL_IS_NULL(controller) && ZVAL_IS_NULL(action)) {
+	if (ZVAL_IS_NULL(module) && ZVAL_IS_NULL(controller) && ZVAL_IS_NULL(action)) {	/* 三个都不存在，返回0 */
 		return 0;
 	}
 
-	if (Z_TYPE_P(module) == IS_STRING && yaf_application_is_module_name(Z_STRVAL_P(module), Z_STRLEN_P(module) TSRMLS_CC)) {
+	if (Z_TYPE_P(module) == IS_STRING && yaf_application_is_module_name(Z_STRVAL_P(module), Z_STRLEN_P(module) TSRMLS_CC)) {	/* moduel是字符串，并且是已经注册了的合法module */
+		/* Yaf_Request_Abstract::$module = $module */
 		zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_MODULE), module TSRMLS_CC);
 	}
-
+	/**
+	 *	Yaf_Request_Abstract::$controller = $controller 
+	 *	Yaf_Request_Abstract::$action = $action 
+	 */
 	zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_CONTROLLER), controller TSRMLS_CC);
 	zend_update_property(yaf_request_ce, request, ZEND_STRL(YAF_REQUEST_PROPERTY_NAME_ACTION), action TSRMLS_CC);
 
@@ -62,6 +75,7 @@ int yaf_route_simple_route(yaf_route_t *route, yaf_request_t *request TSRMLS_DC)
 /* }}} */
 
 /** {{{ yaf_route_t * yaf_route_simple_instance(yaf_route_t *this_ptr, zval *module, zval *controller, zval *action TSRMLS_DC)
+ *	实例化，给成员变量赋值
  */
 yaf_route_t * yaf_route_simple_instance(yaf_route_t *this_ptr, zval *module, zval *controller, zval *action TSRMLS_DC) {
 	yaf_route_t *instance;
@@ -73,10 +87,15 @@ yaf_route_t * yaf_route_simple_instance(yaf_route_t *this_ptr, zval *module, zva
 		object_init_ex(instance, yaf_route_simple_ce);
 	}
 
+	/**
+	 *	$this->moduel = $module
+	 *	$this->controller = $controller
+	 *	$this->action = $action
+	 */
 	zend_update_property(yaf_route_simple_ce, instance, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_MODULE), module TSRMLS_CC);
 	zend_update_property(yaf_route_simple_ce, instance, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_CONTROLLER), controller TSRMLS_CC);
 	zend_update_property(yaf_route_simple_ce, instance, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_ACTION), action TSRMLS_CC);
-
+	/* $return $this */
 	return instance;
 }
 /* }}} */
@@ -106,7 +125,7 @@ PHP_METHOD(yaf_route_simple, __construct) {
 
 	if (IS_STRING != Z_TYPE_P(module)
 			|| IS_STRING != Z_TYPE_P(controller)
-			|| IS_STRING != Z_TYPE_P(action)) {
+			|| IS_STRING != Z_TYPE_P(action)) {	/* moduel/controller/action都必须是字符串，且都是必须存在的 */
 		YAF_UNINITIALIZED_OBJECT(getThis());
 		yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Expect 3 string paramsters", yaf_route_simple_ce->name);
 		RETURN_FALSE;
@@ -133,9 +152,14 @@ YAF_STARTUP_FUNCTION(route_simple) {
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Route_Simple", "Yaf\\Route\\Simple", yaf_route_simple_methods);
 	yaf_route_simple_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
 	zend_class_implements(yaf_route_simple_ce TSRMLS_CC, 1, yaf_route_ce);
-
+	/* final class Yaf_Route_Simple implements Yaf_Route_Interface */
 	yaf_route_simple_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/**
+	 *	protected $controller = null
+	 *	protected $module = null
+	 *	protected $action = null
+	 */
 	zend_declare_property_null(yaf_route_simple_ce, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_CONTROLLER), ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_route_simple_ce, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_MODULE), ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_route_simple_ce, ZEND_STRL(YAF_ROUTE_SIMPLE_VAR_NAME_ACTION), ZEND_ACC_PROTECTED TSRMLS_CC);
