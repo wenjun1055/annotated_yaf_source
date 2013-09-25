@@ -63,9 +63,9 @@ yaf_route_t * yaf_route_supervar_instance(yaf_route_t *this_ptr, zval *name TSRM
 		MAKE_STD_ZVAL(instance);
 		object_init_ex(instance, yaf_route_supervar_ce);
 	}
-
+    /* $this->_var_name = $var */
 	zend_update_property(yaf_route_supervar_ce, instance, ZEND_STRL(YAF_ROUTE_SUPERVAR_PROPETY_NAME_VAR), name TSRMLS_CC);
-
+    /* return $this */
 	return instance;
 }
 /* }}} */
@@ -93,12 +93,15 @@ PHP_METHOD(yaf_route_supervar, __construct) {
 		return;
 	}
 
-	if (Z_TYPE_P(var) != IS_STRING || !Z_STRLEN_P(var)) {
+	if (Z_TYPE_P(var) != IS_STRING || !Z_STRLEN_P(var)) {  /* 必须传递$var */
 		YAF_UNINITIALIZED_OBJECT(getThis());
 		yaf_trigger_error(YAF_ERR_TYPE_ERROR TSRMLS_CC, "Expects a valid string super var name", yaf_route_supervar_ce->name);
 		RETURN_FALSE;
 	}
-
+    /** 
+     *  Why:这里为什么不调用yaf_route_supervar_instance，而是自己直接赋值呢
+     *  $this->_var_name = $var 
+     */
 	zend_update_property(yaf_route_supervar_ce, getThis(), ZEND_STRL(YAF_ROUTE_SUPERVAR_PROPETY_NAME_VAR), var TSRMLS_CC);
 }
 /** }}} */
@@ -118,9 +121,10 @@ YAF_STARTUP_FUNCTION(route_supervar) {
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Route_Supervar", "Yaf\\Route\\Supervar", yaf_route_supervar_methods);
 	yaf_route_supervar_ce = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
+    /* final class Yaf_Route_Supervar implements Yaf_Route_Interface */
 	zend_class_implements(yaf_route_supervar_ce TSRMLS_CC, 1, yaf_route_ce);
 	yaf_route_supervar_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
-
+    /* protected $_var_name = null */
 	zend_declare_property_null(yaf_route_supervar_ce, ZEND_STRL(YAF_ROUTE_SUPERVAR_PROPETY_NAME_VAR),  ZEND_ACC_PROTECTED TSRMLS_CC);
 
 	return SUCCESS;
