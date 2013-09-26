@@ -55,6 +55,7 @@ zend_function_entry yaf_functions[] = {
 /* }}} */
 
 /** {{{ PHP_INI_MH(OnUpdateSeparator)
+ *	yaf.name_separator呗改变时候调用的函数
  */
 PHP_INI_MH(OnUpdateSeparator) {
 	YAF_G(name_separator) = new_value; 
@@ -64,6 +65,7 @@ PHP_INI_MH(OnUpdateSeparator) {
 /* }}} */
 
 /** {{{ PHP_INI
+ *	配置初始化
  */
 PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("yaf.library",         	"",  PHP_INI_ALL, OnUpdateString, global_library, zend_yaf_globals, yaf_globals)
@@ -108,7 +110,7 @@ PHP_GINIT_FUNCTION(yaf)
 */
 PHP_MINIT_FUNCTION(yaf)
 {
-	REGISTER_INI_ENTRIES();
+	REGISTER_INI_ENTRIES();	//注册ini
 
 #if PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION < 5 
 	php_register_info_logo(YAF_LOGO_GUID, YAF_LOGO_MIME_TYPE, yaf_logo, sizeof(yaf_logo));
