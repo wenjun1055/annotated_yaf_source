@@ -41,6 +41,7 @@ zend_class_entry *yaf_exception_ce;
 zend_class_entry *yaf_buildin_exceptions[YAF_MAX_BUILDIN_EXCEPTION];
 
 /** {{{void yaf_trigger_error(int type TSRMLS_DC, char *format, ...)
+ *	报错
  */
 void yaf_trigger_error(int type TSRMLS_DC, char *format, ...) {
 	va_list args;
@@ -90,7 +91,8 @@ zend_class_entry * yaf_get_exception_base(int root TSRMLS_DC) {
 /* }}} */
 
 /** {{{ void yaf_throw_exception(long code, char *message TSRMLS_DC)
-*/
+ *	抛出异常
+ */
 void yaf_throw_exception(long code, char *message TSRMLS_DC) {
 	zend_class_entry *base_exception = yaf_exception_ce;
 
@@ -119,21 +121,26 @@ PHP_METHOD(yaf_exception, __construct) {
 	object = getThis();
 
 	if (message) {
+		/* $this->message = $message */
 		zend_update_property_string(Z_OBJCE_P(object), object, "message", sizeof("message")-1, message TSRMLS_CC);
 	}
 
 	if (code) {
+		/* $this->code = $code */
 		zend_update_property_long(Z_OBJCE_P(object), object, "code", sizeof("code")-1, code TSRMLS_CC);
 	}
 
 	if (previous) {
+		/* $this->previous = $previous */
 		zend_update_property(Z_OBJCE_P(object), object, ZEND_STRL("previous"), previous TSRMLS_CC);
 	}
 }
 /* }}} */
 
 /** {{{ proto Yaf_Exception::getPrevious(void)
-*/
+ *	返回异常链中的前一个异常
+ *	http://cn2.php.net/manual/zh/exception.getprevious.php
+ */
 PHP_METHOD(yaf_exception, getPrevious) {
 	zval *prev = zend_read_property(Z_OBJCE_P(getThis()), getThis(), ZEND_STRL("previous"), 1 TSRMLS_CC);
 	RETURN_ZVAL(prev, 1, 0);
@@ -166,36 +173,52 @@ YAF_STARTUP_FUNCTION(exception) {
 	zend_class_entry view_notfound_ce;
 	zend_class_entry type_ce;
 
+	/* class Yaf_Exception extends Exception */
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Exception", "Yaf\\Exception", yaf_exception_methods);
 	yaf_exception_ce = zend_register_internal_class_ex(&ce, yaf_get_exception_base(0 TSRMLS_CC), NULL TSRMLS_CC);
+
+	/**  
+	 *	protected $message  = null
+	 *	protected $code     = 0
+	 *	protected $previous = 0
+	 */
 	zend_declare_property_null(yaf_exception_ce, ZEND_STRL("message"), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_long(yaf_exception_ce, ZEND_STRL("code"), 0,	ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_exception_ce, ZEND_STRL("previous"),  ZEND_ACC_PROTECTED TSRMLS_CC);
 
+	/* Yaf_Exception_StartupError extends Yaf_Exception */
 	YAF_INIT_CLASS_ENTRY(startup_ce, "Yaf_Exception_StartupError", "Yaf\\Exception\\StartupError", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_STARTUP_FAILED)] = zend_register_internal_class_ex(&startup_ce, yaf_exception_ce, NULL TSRMLS_CC);
 
+	/* Yaf_Exception_RouterFailed extends Yaf_Exception */
 	YAF_INIT_CLASS_ENTRY(route_ce, "Yaf_Exception_RouterFailed", "Yaf\\Exception\\RouterFailed", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_ROUTE_FAILED)] = zend_register_internal_class_ex(&route_ce, yaf_exception_ce, NULL TSRMLS_CC);
 
+	/* Yaf_Exception_DispatchFailed extends Yaf_Exception */
 	YAF_INIT_CLASS_ENTRY(dispatch_ce, "Yaf_Exception_DispatchFailed", "Yaf\\Exception\\DispatchFailed", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_DISPATCH_FAILED)] = zend_register_internal_class_ex(&dispatch_ce, yaf_exception_ce, NULL TSRMLS_CC);
 
+	/* Yaf_Exception_LoadFailed extends Yaf_Exception */
 	YAF_INIT_CLASS_ENTRY(loader_ce, "Yaf_Exception_LoadFailed", "Yaf\\Exception\\LoadFailed", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_AUTOLOAD_FAILED)] = zend_register_internal_class_ex(&loader_ce, yaf_exception_ce, NULL TSRMLS_CC);
 
+	/* Yaf_Exception_LoadFailed_Module extends Yaf_Exception_LoadFailed */
 	YAF_INIT_CLASS_ENTRY(module_notfound_ce, "Yaf_Exception_LoadFailed_Module", "Yaf\\Exception\\LoadFailed\\Module", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_NOTFOUND_MODULE)] = zend_register_internal_class_ex(&module_notfound_ce, yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_AUTOLOAD_FAILED)], NULL TSRMLS_CC);
 
+	/* Yaf_Exception_LoadFailed_Controller extends Yaf_Exception_LoadFailed */
 	YAF_INIT_CLASS_ENTRY(controller_notfound_ce, "Yaf_Exception_LoadFailed_Controller", "Yaf\\Exception\\LoadFailed\\Controller", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_NOTFOUND_CONTROLLER)] = zend_register_internal_class_ex(&controller_notfound_ce, yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_AUTOLOAD_FAILED)], NULL TSRMLS_CC);
 
+	/* Yaf_Exception_LoadFailed_Action extends Yaf_Exception_LoadFailed */
 	YAF_INIT_CLASS_ENTRY(action_notfound_ce, "Yaf_Exception_LoadFailed_Action", "Yaf\\Exception\\LoadFailed\\Action", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_NOTFOUND_ACTION)] = zend_register_internal_class_ex(&action_notfound_ce, yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_AUTOLOAD_FAILED)], NULL TSRMLS_CC);
 
+	/* Yaf_Exception_LoadFailed_View extends Yaf_Exception_LoadFailed */
 	YAF_INIT_CLASS_ENTRY(view_notfound_ce, "Yaf_Exception_LoadFailed_View", "Yaf\\Exception\\LoadFailed\\View", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_NOTFOUND_VIEW)] = zend_register_internal_class_ex(&view_notfound_ce, yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_AUTOLOAD_FAILED)], NULL TSRMLS_CC);
 
+	/* Yaf_Exception_TypeError extends Yaf_Exception */
 	YAF_INIT_CLASS_ENTRY(type_ce, "Yaf_Exception_TypeError", "Yaf\\Exception\\TypeError", NULL);
 	yaf_buildin_exceptions[YAF_EXCEPTION_OFFSET(YAF_ERR_TYPE_ERROR)] = zend_register_internal_class_ex(&type_ce, yaf_exception_ce, NULL TSRMLS_CC);
 
