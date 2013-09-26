@@ -93,7 +93,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	char 		*default_module;            //默认module
 	char 		*default_controller;        //默认controller
 	char 		*default_action;            //默认action
-	char 		*bootstrap;
+	char 		*bootstrap;                 //bootstrap路径
 	char 		*name_separator;            //类名分隔符
 	long 		name_separator_len;         //类名分隔符长度
 	zend_bool 	lowcase_path;               //开启的情况下，路径信息中的目录部分都会被转换成小写

@@ -555,7 +555,8 @@ PHP_METHOD(yaf_application, run) {
 
 /** {{{ proto public Yaf_Application::execute(callback $func)
  * We can not call to zif_call_user_func on windows, since it was not declared with dllexport
-*/
+ *	http://cn2.php.net/manual/zh/yaf-application.execute.php
+ */
 PHP_METHOD(yaf_application, execute) {
 #if ((PHP_MAJOR_VERSION == 5) && (PHP_MINOR_VERSION > 2)) || (PHP_MAJOR_VERSION > 5)
     zval *retval_ptr;
@@ -579,7 +580,7 @@ PHP_METHOD(yaf_application, execute) {
     zval ***params;
     zval *retval_ptr;
     char *name;
-    int argc = ZEND_NUM_ARGS();
+    int argc = ZEND_NUM_ARGS();	/* 传递参数个数 */
 
     if (argc < 1) {
         return;
@@ -635,68 +636,83 @@ PHP_METHOD(yaf_application, execute) {
 /* }}} */
 
 /** {{{ proto public Yaf_Application::app(void)
-*/
+ *	获取当前的Yaf_Application实例
+ */
 PHP_METHOD(yaf_application, app) {
+	/* Yaf_Application $app = selef::$_app */
 	yaf_application_t *app = zend_read_static_property(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_APP), 1 TSRMLS_CC);
 	RETVAL_ZVAL(app, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getConfig(void)
-*/
+ *	获取Yaf_Application读取的配置项
+ */
 PHP_METHOD(yaf_application, getConfig) {
+	/* Yaf_Config_Abstract $config = $this->config */
 	yaf_config_t *config = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_CONFIG), 1 TSRMLS_CC);
 	RETVAL_ZVAL(config, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getDispatcher(void)
-*/
-PHP_METHOD(yaf_application, getDispatcher) {
+ *	获取当前的分发器
+ */
+PHP_METHOD(yaf_application, getDispatcher) {、
+	/* $dispatcher = $this->dispatcher */
 	yaf_dispatcher_t *dispatcher = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_DISPATCHER), 1 TSRMLS_CC);
 	RETVAL_ZVAL(dispatcher, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getModules(void)
-*/
+ *	获取在配置文件中申明的模块.
+ */
 PHP_METHOD(yaf_application, getModules) {
+	/* $modules = $this->_modules */
 	zval *modules = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_MODULES), 1 TSRMLS_CC);
 	RETVAL_ZVAL(modules, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::environ(void)
-*/
+ *	获取当前Yaf_Application的环境名
+ */
 PHP_METHOD(yaf_application, environ) {
+	/* $env = $this->_environ */
 	zval *env = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ENV), 1 TSRMLS_CC);
 	RETURN_STRINGL(Z_STRVAL_P(env), Z_STRLEN_P(env), 1);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::bootstrap(void)
-*/
+ *	http://cn2.php.net/manual/zh/yaf-application.bootstrap.php
+ */
 PHP_METHOD(yaf_application, bootstrap) {
 	char *bootstrap_path;
 	uint len, retval = 1;
 	zend_class_entry	**ce;
 	yaf_application_t	*self = getThis();
 
-	if (zend_hash_find(EG(class_table), YAF_DEFAULT_BOOTSTRAP_LOWER, YAF_DEFAULT_BOOTSTRAP_LEN, (void **) &ce) != SUCCESS) {
-		if (YAF_G(bootstrap)) {
+	/**
+	 *	#define YAF_DEFAULT_BOOTSTRAP_LOWER	  	"bootstrap"
+	 *	#define YAF_DEFAULT_BOOTSTRAP_LEN		10
+	 */
+	if (zend_hash_find(EG(class_table), YAF_DEFAULT_BOOTSTRAP_LOWER, YAF_DEFAULT_BOOTSTRAP_LEN, (void **) &ce) != SUCCESS) {	/* bootstramp没注册，按照路径加载 */
+		if (YAF_G(bootstrap)) {	//设置了application.bootstrap直接用
 			bootstrap_path  = estrdup(YAF_G(bootstrap));
 			len = strlen(YAF_G(bootstrap));
-		} else {
+		} else {	//自己拼装 APPLICATION_PATH . DIRECTORY_SEPARATOR . 'Bootstrap' . '.php'
 			len = spprintf(&bootstrap_path, 0, "%s%c%s.%s", YAF_G(directory), DEFAULT_SLASH, YAF_DEFAULT_BOOTSTRAP, YAF_G(ext));
 		}
 
-		if (!yaf_loader_import(bootstrap_path, len + 1, 0 TSRMLS_CC)) {
+		if (!yaf_loader_import(bootstrap_path, len + 1, 0 TSRMLS_CC)) {	/* 加载编译Bootstamp.php文件 */
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Couldn't find bootstrap file %s", bootstrap_path);
 			retval = 0;
-		} else if (zend_hash_find(EG(class_table), YAF_DEFAULT_BOOTSTRAP_LOWER, YAF_DEFAULT_BOOTSTRAP_LEN, (void **) &ce) != SUCCESS)  {
+		} else if (zend_hash_find(EG(class_table), YAF_DEFAULT_BOOTSTRAP_LOWER, YAF_DEFAULT_BOOTSTRAP_LEN, (void **) &ce) != SUCCESS)  {	/* 再次查找是否编译注册成功 */
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Couldn't find class %s in %s", YAF_DEFAULT_BOOTSTRAP, bootstrap_path);
 			retval = 0;
-		} else if (!instanceof_function(*ce, yaf_bootstrap_ce TSRMLS_CC)) {
+		} else if (!instanceof_function(*ce, yaf_bootstrap_ce TSRMLS_CC)) {	/* 继承自Yaf_Bootstrap_Abstract */
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Expect a %s instance, %s give", yaf_bootstrap_ce->name, (*ce)->name);
 			retval = 0;
 		}
@@ -706,29 +722,32 @@ PHP_METHOD(yaf_application, bootstrap) {
 
 	if (!retval) {
 		RETURN_FALSE;
-	} else {
+	} else {	/* Bootstramp.php编译加载成功无异常 */
 		zval 			*bootstrap;
 		HashTable 		*methods;
 		yaf_dispatcher_t *dispatcher;
 
+		/* $bootstramp = new Bootstrap() */
 		MAKE_STD_ZVAL(bootstrap);
 		object_init_ex(bootstrap, *ce);
+		/* $dispatcher = $this->dispatcher */
 		dispatcher 	= zend_read_property(yaf_application_ce, self, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_DISPATCHER), 1 TSRMLS_CC);
 
 		methods		= &((*ce)->function_table);
 		for(zend_hash_internal_pointer_reset(methods);
 				zend_hash_has_more_elements(methods) == SUCCESS;
-				zend_hash_move_forward(methods)) {
+				zend_hash_move_forward(methods)) {	/* 遍历Bootstrap中的method */
 			char *func;
 			uint len;
 			ulong idx;
 
 			zend_hash_get_current_key_ex(methods, &func, &len, &idx, 0, NULL);
 			/* cann't use ZEND_STRL in strncasecmp, it cause a compile failed in VS2009 */
+			/* 遍历查找，method名称是否以“_init”打头 */
 			if (strncasecmp(func, YAF_BOOTSTRAP_INITFUNC_PREFIX, sizeof(YAF_BOOTSTRAP_INITFUNC_PREFIX)-1)) {
 				continue;
 			}
-
+			/* 运行method，并且把$this->dispatcher当做参数传递 */
 			zend_call_method(&bootstrap, *ce, NULL, func, len - 1, NULL, 1, dispatcher, NULL TSRMLS_CC);
 			/** an uncaught exception threw in function call */
 			if (EG(exception)) {
@@ -739,39 +758,49 @@ PHP_METHOD(yaf_application, bootstrap) {
 
 		zval_ptr_dtor(&bootstrap);
 	}
-
+	/* return $this */
 	RETVAL_ZVAL(self, 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getLastErrorNo(void)
-*/
+ *	http://cn2.php.net/manual/zh/yaf-application.getlasterrorno.php
+ */
 PHP_METHOD(yaf_application, getLastErrorNo) {
+	/* $errcode = $this->_err_no */
 	zval *errcode = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRNO), 1 TSRMLS_CC);
 	RETURN_LONG(Z_LVAL_P(errcode));
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getLastErrorMsg(void)
-*/
+ *	http://cn2.php.net/manual/zh/yaf-application.getlasterrorno.php
+ */
 PHP_METHOD(yaf_application, getLastErrorMsg) {
+	/* $errmsg = $this->_err_msg */
 	zval *errmsg = zend_read_property(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRMSG), 1 TSRMLS_CC);
 	RETURN_STRINGL(Z_STRVAL_P(errmsg), Z_STRLEN_P(errmsg), 1);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::clearLastError(void)
-*/
+ *	http://cn2.php.net/manual/zh/yaf-application.clearlasterror.php
+ */
 PHP_METHOD(yaf_application, clearLastError) {
+	/** 
+	 *	$this->_err_no  = 0
+	 *	$this->_err_msg = 0
+	 */
 	zend_update_property_long(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRNO), 0 TSRMLS_CC);
 	zend_update_property_string(yaf_application_ce, getThis(), ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRMSG), "" TSRMLS_CC);
-
+	/* return $this */
 	RETURN_ZVAL(getThis(), 1, 0);
 }
 /* }}} */
 
 /** {{{ proto public Yaf_Application::setAppDirectory(string $directory)
-*/
+ *	设置application.directory
+ */
 PHP_METHOD(yaf_application, setAppDirectory) {
 	int	 len;
 	char *directory;
@@ -794,7 +823,8 @@ PHP_METHOD(yaf_application, setAppDirectory) {
 /* }}} */
 
 /** {{{ proto public Yaf_Application::getAppDirectory(void)
-*/
+ *	获得application.directory
+ */
 PHP_METHOD(yaf_application, getAppDirectory) {
 	RETURN_STRING(YAF_G(directory), 1);
 }
@@ -830,18 +860,32 @@ zend_function_entry yaf_application_methods[] = {
 YAF_STARTUP_FUNCTION(application) {
 	zend_class_entry ce;
 	YAF_INIT_CLASS_ENTRY(ce, "Yaf_Application", "Yaf\\Application", yaf_application_methods);
-
+	/* final class Yaf_Application */
 	yaf_application_ce 			  = zend_register_internal_class_ex(&ce, NULL, NULL TSRMLS_CC);
 	yaf_application_ce->ce_flags |= ZEND_ACC_FINAL_CLASS;
 
+	/**
+	 *	protected $config 	   = null
+	 *	protected $dispatcher  = null
+	 *	protected static $_app = null
+	 *	protected $_modules    = null
+	 */
 	zend_declare_property_null(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_CONFIG), 	ZEND_ACC_PROTECTED 	TSRMLS_CC);
 	zend_declare_property_null(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_DISPATCHER), ZEND_ACC_PROTECTED 	TSRMLS_CC);
 	zend_declare_property_null(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_APP), 	 	ZEND_ACC_STATIC|ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_MODULES), 	ZEND_ACC_PROTECTED TSRMLS_CC);
 
+	/**
+	 *	protected $_running = false
+	 *	protected $_environ = YAF_G(environ)
+	 */
 	zend_declare_property_bool(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_RUN),	 0, ZEND_ACC_PROTECTED 	TSRMLS_CC);
 	zend_declare_property_string(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ENV), YAF_G(environ), ZEND_ACC_PROTECTED TSRMLS_CC);
 
+	/**
+	 *	protected $_err_no  = 0
+	 *	protected $_err_msg = ""
+	 */
 	zend_declare_property_long(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRNO), 0, ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_string(yaf_application_ce, ZEND_STRL(YAF_APPLICATION_PROPERTY_NAME_ERRMSG), "", ZEND_ACC_PROTECTED TSRMLS_CC);
 
