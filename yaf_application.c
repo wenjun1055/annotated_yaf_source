@@ -122,6 +122,10 @@ static int yaf_application_parse_option(zval *options TSRMLS_DC) {
 
 	/* 1.验证配置文件是否包含框架需要的配置信息 */
 	conf = HASH_OF(options);
+	/** 
+	 *	application或者yaf都行 
+	 *	eg:application.directory or yaf.directory
+	 */
 	if (zend_hash_find(conf, ZEND_STRS("application"), (void **)&ppzval) == FAILURE) {
 		/* For back compatibilty */
 		if (zend_hash_find(conf, ZEND_STRS("yaf"), (void **)&ppzval) == FAILURE) {
