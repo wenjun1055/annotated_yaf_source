@@ -119,7 +119,7 @@ ZEND_BEGIN_MODULE_GLOBALS(yaf)
 	void		*buffer;
 	void 		*owrite_handler;
 #endif
-	zval        *active_ini_file_section;      //TODO ini配置文件活跃的单节，类似[common]
+	zval        *active_ini_file_section;      //ini配置文件活跃的单节，类似[common]
 	zval        *ini_wanted_section;
 	uint        parsing_flag;          //配置文件解析进度标识
 #ifdef YAF_HAVE_NAMESPACE
