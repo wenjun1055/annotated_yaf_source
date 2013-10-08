@@ -143,7 +143,7 @@ PHP_METHOD(yaf_config_simple, get) {
 		/* 查找到的结果为一个数组 */
 		if (Z_TYPE_PP(ppzval) == IS_ARRAY) {
 			/* 以当前的数组值生成一个新的对象，并返回
-			 * TODO:没明白为啥这样做
+			 * 实现：Yaf_Config_Ini::get('config')->params->url
 			 */
 			if ((ret = yaf_config_simple_format(getThis(), ppzval TSRMLS_CC))) {
 				RETURN_ZVAL(ret, 1, 1);
