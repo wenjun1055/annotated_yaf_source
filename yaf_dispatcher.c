@@ -1515,9 +1515,9 @@ YAF_STARTUP_FUNCTION(dispatcher) {
 	zend_declare_property_bool(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_FLUSH), 	0, ZEND_ACC_PROTECTED TSRMLS_CC);
 
 	/**
-	 *	protected $_default_module 	   = null;
-	 *	protected $_default_controller = null;
-	 *	protected $_default_action	   = null;
+	 *	protected $_default_module 	   = true;
+	 *	protected $_default_controller = true;
+	 *	protected $_default_action	   = true;
 	 */
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_MODULE), 		ZEND_ACC_PROTECTED TSRMLS_CC);
 	zend_declare_property_null(yaf_dispatcher_ce, ZEND_STRL(YAF_DISPATCHER_PROPERTY_NAME_CONTROLLER), 	ZEND_ACC_PROTECTED TSRMLS_CC);
